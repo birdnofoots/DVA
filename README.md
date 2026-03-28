@@ -154,33 +154,47 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ### 下载链接
 
+> ⚠️ **2026年3月更新**：以下原链接已全部失效（返回404），已更新为可用方案。
+
 #### YOLOv8n 车辆检测
 ```bash
-curl -L -o yolov8n-vehicle.onnx \\
-  https://github.com/ultralytics/ultralytics/releases/download/v8.2.0/yolov8n.onnx
+# 方法一：下载 PyTorch 版本，然后导出为 ONNX（推荐）
+curl -L -o yolov8n.pt \\
+  https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt
+
+# 安装 ultralytics 并导出为 ONNX：
+pip install ultralytics
+python3 -c "from ultralytics import YOLO; m = YOLO('yolov8n.pt'); m.export(format='onnx')"
+# 输出文件：runs/detect/train/weights/yolov8n.onnx（移动到项目 models/ 目录备用）
+mv runs/detect/train/weights/yolov8n.onnx app/src/main/assets/models/
 ```
 
 #### LaneNet 车道线检测
 ```bash
-curl -L -o lanenet.onnx \\
-  https://github.com/harryhanYu/LaneNet_Deep_Learning_Studio/releases/download/v1.0/lanenet.onnx
+# ⚠️ 原仓库已下架（2026-03 返回404）
+# 备选：搜索 GitHub 上其他 LaneNet ONNX 复现版本
+# 或使用 PaddleSeg 的车道线模型作为替代
 ```
 
 #### LPRNet 车牌识别
 ```bash
-curl -L -o lprnet_chinese.onnx \\
-  https://raw.githubusercontent.com/myyrRO/le-cheng-shu/main/lprnet.onnx
+# ⚠️ 原仓库已下架（2026-03 返回404）
+# 备选：PaddleOCR 中文车牌模型 / HuggingFace 第三方中文车牌模型
 ```
 
 
 ### 国内镜像（推荐）
 
-如果 GitHub 下载慢，使用镜像：
+如果 GitHub 下载慢，使用镜像或本地代理：
 
 ```bash
-# ghproxy 镜像
+# HTTP 代理直连（推荐，已验证可用）
+curl -L --proxy http://192.168.1.189:7890 \\
+  -o yolov8n.pt https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt
+
+# ghfast.top 国内加速
 curl -L -o model.onnx \\
-  https://ghproxy.com/https://github.com/xxx/xxx/releases/download/v1.0/model.onnx
+  https://ghfast.top/https://github.com/xxx/xxx/releases/download/v1.0/model.onnx
 ```
 
 ### 模型放置
