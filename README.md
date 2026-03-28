@@ -1,0 +1,423 @@
+# DVA - DashCam Violation Analyzer
+
+<div align="center">
+
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Android](https://img.shields.io/badge/Android-34%2B-green.svg)
+![Kotlin](https://img.shields.io/badge/Kotlin-1.9.21-purple.svg)
+
+**安卓端侧行车记录仪违章分析系统**
+
+自动识别车辆变道不打灯违章行为，截取关键证据图片并识别车牌信息。
+
+[功能介绍](#功能介绍) • [技术架构](#技术架构) • [快速开始](#快速开始) • [下载模型](#下载模型) • [项目结构](#项目结构) • [贡献指南](#贡献指南)
+
+</div>
+
+---
+
+## 功能介绍
+
+### 核心功能
+
+- **视频文件管理**：扫描本地文件夹，支持 MP4、MOV、AVI、MKV 等格式
+- **变道违章检测**：自动识别车辆跨越车道线行为
+- **证据截图采集**：截取违章时刻及前后 5 秒共 3 张无损 PNG 截图
+- **车牌识别**：识别中国大陆蓝牌/绿牌新能源车牌
+- **报告生成**：生成结构化分析报告
+
+### 截图规格
+
+| 截图类型 | 时间戳 | 说明 |
+|----------|--------|------|
+| 违章前 | T-5s | 变道发生前 5 秒 |
+| 违章时刻 | T0 | 跨越车道线的瞬间 |
+| 违章后 | T+5s | 变道发生后 5 秒 |
+
+### 支持的违章类型
+
+- ✅ 变道不打灯（当前版本）
+- 🔜 超速（规划中）
+- 🔜 闯红灯（规划中）
+- 🔜 违规停车（规划中）
+
+---
+
+## 技术架构
+
+### 技术栈
+
+| 层级 | 技术 | 说明 |
+|------|------|------|
+| **UI** | Jetpack Compose + Material3 | 现代化声明式 UI |
+| **架构** | MVVM + Clean Architecture | 清晰分层，易于测试 |
+| **DI** | Hilt | Google 官方依赖注入 |
+| **视频** | MediaCodec | 硬件加速解码 |
+| **ML** | ONNX Runtime Mobile | 端侧高性能推理 |
+| **存储** | Room + DataStore | 本地持久化 |
+
+### 系统架构图
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Presentation Layer                     │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │   视频列表   │  │   分析进度   │  │   报告查看/导出     │ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+          │
+┌─────────▼─────────────────────────────────────────────────┐
+│                      Domain Layer                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐ │
+│  │ AnalyzeVideo│  │ DetectLPR   │  │ GenerateReport  │ │
+│  │ UseCase     │  │ UseCase     │  │ UseCase         │ │
+│  └──────────────┘  └──────────────┘  └──────────────────┘ │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │              Detection Plugins (策略模式)            │  │
+│  │  LaneChangeDetector │ [Future] SpeedDetector      │  │
+│  └────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+          │
+┌─────────▼─────────────────────────────────────────────────┐
+│                   Infrastructure Layer                     │
+│  ┌──────────────┐  ┌───────────────┐  ┌───────────────┐  │
+│  │ MediaDecoder │  │ LocalDatabase │  │ ML Inference  │  │
+│  └──────────────┘  └───────────────┘  └───────────────┘  │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │   YOLOv8n      │   LaneNet     │   LPRNet      │  │
+│  └────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 快速开始
+
+### 环境要求
+
+- Android Studio Hedgehog (2023.1.1) 或更高版本
+- Android SDK 34
+- Kotlin 1.9.21
+- Gradle 8.2
+
+### 克隆项目
+
+```bash
+git clone https://github.com/YOUR_USERNAME/dva.git
+cd dva
+```
+
+### 下载模型
+
+首次运行需要下载 ML 模型（总计约 31MB）：
+
+```bash
+# 方式一：运行下载脚本
+chmod +x download_models.sh
+./download_models.sh
+
+# 方式二：手动下载
+cd app/src/main/assets/models
+# 下载链接见下方"下载模型"章节
+```
+
+### 构建项目
+
+```bash
+# 使用 Gradle Wrapper
+./gradlew assembleDebug
+
+# 或在 Android Studio 中打开项目
+# File > Open > 选择项目根目录
+```
+
+### 安装 APK
+
+```bash
+# 通过 ADB 安装
+adb install app/build/outputs/apk/debug/app-debug.apk
+```
+
+---
+
+## 下载模型
+
+### 模型列表
+
+| 模型 | 文件名 | 大小 | 用途 |
+|------|--------|------|------|
+| 车辆检测 | `yolov8n-vehicle.onnx` | ~6MB | 检测车辆、行人等目标 |
+| 车道线检测 | `lanenet.onnx` | ~15MB | 检测车道线 |
+| 车牌识别 | `lprnet_chinese.onnx` | ~10MB | 识别车牌号码 |
+
+### 下载链接
+
+#### YOLOv8n 车辆检测
+```bash
+curl -L -o yolov8n-vehicle.onnx \\
+  https://github.com/ultralytics/ultralytics/releases/download/v8.2.0/yolov8n.onnx
+```
+
+#### LaneNet 车道线检测
+```bash
+curl -L -o lanenet.onnx \\
+  https://github.com/harryhanYu/LaneNet_Deep_Learning_Studio/releases/download/v1.0/lanenet.onnx
+```
+
+#### LPRNet 车牌识别
+```bash
+curl -L -o lprnet_chinese.onnx \\
+  https://raw.githubusercontent.com/myyrRO/le-cheng-shu/main/lprnet.onnx
+```
+
+
+### 国内镜像（推荐）
+
+如果 GitHub 下载慢，使用镜像：
+
+```bash
+# ghproxy 镜像
+curl -L -o model.onnx \\
+  https://ghproxy.com/https://github.com/xxx/xxx/releases/download/v1.0/model.onnx
+```
+
+### 模型放置
+
+将下载的 `.onnx` 文件放入：
+```
+app/src/main/assets/models/
+├── yolov8n-vehicle.onnx
+├── lanenet.onnx
+└── lprnet_chinese.onnx
+```
+
+---
+
+## 项目结构
+
+```
+DVA/
+├── app/
+│   ├── src/main/
+│   │   ├── java/com/dva/app/
+│   │   │   ├── di/                    # 依赖注入 (Hilt)
+│   │   │   ├── domain/               # 领域层
+│   │   │   │   ├── model/            # 领域模型
+│   │   │   │   ├── repository/        # 仓库接口
+│   │   │   │   ├── usecase/          # 用例
+│   │   │   │   └── detector/         # 违章检测器
+│   │   │   ├── data/                 # 数据层
+│   │   │   │   ├── local/            # 本地数据源
+│   │   │   │   └── repository/       # 仓库实现
+│   │   │   ├── infrastructure/        # 基础设施层
+│   │   │   │   ├── video/            # 视频处理
+│   │   │   │   └── ml/              # ML 推理
+│   │   │   └── presentation/         # 表现层
+│   │   │       ├── onboarding/       # 初始化页面
+│   │   │       ├── video/            # 视频列表
+│   │   │       ├── analysis/         # 分析进度
+│   │   │       ├── report/           # 报告查看
+│   │   │       └── settings/          # 设置
+│   │   └── res/                      # 资源文件
+│   └── assets/models/                 # ML 模型
+│       ├── yolov8n-vehicle.onnx
+│       ├── lanenet.onnx
+│       └── lprnet_chinese.onnx
+├── build.gradle.kts                   # 根项目配置
+├── settings.gradle.kts                # 模块配置
+├── gradle.properties                 # Gradle 属性
+└── README.md                         # 项目文档
+```
+
+---
+
+## 模块说明
+
+### 领域层 (domain)
+
+
+- **model**: 领域模型（Video, Vehicle, Violation, LicensePlate 等）
+- **repository**: 仓库接口定义
+- **usecase**: 用例（StartAnalysis, GenerateReport 等）
+- **detector**: 违章检测器接口和实现
+
+### 数据层 (data)
+
+- **local/db**: Room 数据库（Entity, DAO）
+- **local/file**: 文件存储管理
+- **repository**: 仓库实现
+
+### 基础设施层 (infrastructure)
+
+- **video**: 视频解码、帧提取、截图采集
+- **ml**: ONNX 推理引擎、车辆检测、车道线检测、车牌识别
+
+### 表现层 (presentation)
+
+- **onboarding**: 模型初始化页面
+- **video**: 视频列表
+- **analysis**: 分析进度
+- **report**: 报告查看
+- **settings**: 设置
+
+---
+
+## API 使用示例
+
+### 启动视频分析
+
+```kotlin
+val startAnalysisUseCase: StartAnalysisUseCase
+
+val result = startAnalysisUseCase(
+    videoId = "video-uuid",
+    onProgress = { progress ->
+        // 更新进度 UI
+        updateProgress(progress.progressPercent)
+    },
+    onViolationFound = { violation ->
+        // 处理发现的违章
+        saveViolation(violation)
+    }
+)
+```
+
+### 获取违章报告
+
+```kotlin
+val generateReportUseCase: GenerateReportUseCase
+
+val report = generateReportUseCase(taskId)
+// report.violations
+// report.summary.totalViolations
+// report.summary.platesIdentified
+```
+
+---
+
+## 贡献指南
+
+欢迎提交 Issue 和 Pull Request！
+
+### 开发环境设置
+
+1. Fork 本仓库
+2. 克隆你的 Fork
+3. 创建分支
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+4. 进行开发
+5. 提交更改
+   ```bash
+   git commit -m "Add: your feature description"
+   ```
+6. 推送分支
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+7. 创建 Pull Request
+
+### 代码规范
+
+- 遵循 Kotlin 编码规范
+- 使用中文注释复杂逻辑
+- 确保单元测试通过
+- 提交前运行 `./gradlew check`
+
+---
+
+## 常见问题
+
+### Q: 模型下载失败怎么办？
+
+A: 尝试使用国内镜像，或手动下载后放入 `assets/models/` 目录。
+
+### Q: 支持哪些视频格式？
+
+A: 支持 MP4、MOV、AVI、MKV 等主流格式，需要设备支持对应编解码器。
+
+### Q: 如何添加新的违章类型？
+
+A: 实现 `ViolationDetector` 接口并注册到 `DetectorRegistry` 即可。详见详细设计文档。
+
+---
+
+## 许可证
+
+本项目采用 MIT 许可证。详见 [LICENSE](LICENSE) 文件。
+
+---
+
+## 联系方式
+
+- GitHub Issues: https://github.com/birdnofoots/dva/issues
+- 邮箱: birdnofoots@gmail.com
+
+---
+
+<div align="center">
+
+**如果这个项目对你有帮助，请给个 Star ⭐**
+
+</div>
+
+---
+
+*文档版本: v1.0*  
+*最后更新: 2024年*
+
+
+---
+
+## 构建 APK
+
+### 使用 Android Studio
+
+1. 打开 Android Studio
+2. File > Open > 选择 `DVA` 文件夹
+3. 等待 Gradle Sync 完成
+4. Build > Build Bundle(s) / APK(s) > Build APK(s)
+5. APK 位于 `app/build/outputs/apk/debug/app-debug.apk`
+
+### 使用命令行
+
+```bash
+cd DVA
+./gradlew assembleDebug
+```
+
+### 签名 APK（发布版本）
+
+1. 生成签名密钥：
+```bash
+keytool -genkey -v -keystore my-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias my-key-alias
+```
+
+2. 配置签名（在 `app/build.gradle.kts` 中添加）
+3. 运行：
+```bash
+./gradlew assembleRelease
+```
+
+### 常见编译问题
+
+| 问题 | 解决方案 |
+|------|----------|
+| Gradle 下载失败 | 配置国内镜像（见上方 build.gradle.kts） |
+| Android SDK 未找到 | 设置 ANDROID_HOME 环境变量 |
+| 编译超时 | 增加 JVM 内存：`org.gradle.jvmargs=-Xmx4096m` |
+| 模型文件缺失 | 运行 `./download_models.sh` 或手动下载 |
+
+---
+
+## APK 产物
+
+编译完成后，APK 位于：
+
+```
+app/build/outputs/apk/debug/app-debug.apk
+```
+
+APK 大小约 5-40MB（取决于是否包含 ML 模型）。
+

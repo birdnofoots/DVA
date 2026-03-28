@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary colors -->
+    <color name="primary">#1976D2</color>
+    <color name="primary_variant">#1565C0</color>
+    <color name="on_primary">#FFFFFF</color>
+    
+    <!-- Secondary colors -->
+    <color name="secondary">#FF5722</color>
+    <color name="secondary_variant">#E64A19</color>
+    <color name="on_secondary">#FFFFFF</color>
+    
+    <!-- Background colors -->
+    <color name="background">#FAFAFA</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="on_background">#212121</color>
+    <color name="on_surface">#212121</color>
+    
+    <!-- Status colors -->
+    <color name="error">#B00020</color>
+    <color name="on_error">#FFFFFF</color>
+    <color name="warning">#FFC107</color>
+    <color name="success">#4CAF50</color>
+    
+    <!-- Violation type colors -->
+    <color name="violation_lane_change">#FF5722</color>
+    <color name="violation_speeding">#9C27B0</color>
+    <color name="violation_red_light">#F44336</color>
+</resources>

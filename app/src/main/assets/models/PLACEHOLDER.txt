@@ -1,0 +1,14 @@
+# 模型占位文件
+# 
+# 由于模型文件较大（约31MB），请运行以下命令下载：
+#
+# Linux/Mac:
+#   cd app/src/main/assets/models
+#   ./download_models.sh
+#
+# 或手动下载：
+#   1. YOLOv8n: https://github.com/ultralytics/ultralytics
+#   2. 车道线/车牌: 见 README.md
+#
+# 模型下载后，放置于此目录即可。
+

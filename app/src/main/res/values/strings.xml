@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DVA</string>
+    <string name="app_full_name">DashCam Violation Analyzer</string>
+    
+    <!-- Navigation -->
+    <string name="nav_video_list">视频列表</string>
+    <string name="nav_analysis">分析</string>
+    <string name="nav_report">报告</string>
+    <string name="nav_settings">设置</string>
+    
+    <!-- Video List -->
+    <string name="select_folder">选择文件夹</string>
+    <string name="no_videos">暂无视频</string>
+    <string name="video_count">%d 个视频</string>
+    <string name="start_analysis">开始分析</string>
+    <string name="batch_analysis">批量分析</string>
+    
+    <!-- Analysis -->
+    <string name="analysis_progress">分析进度</string>
+    <string name="analysis_paused">已暂停</string>
+    <string name="analysis_completed">分析完成</string>
+    <string name="violations_found">发现 %d 个违章</string>
+    <string name="pause">暂停</string>
+    <string name="resume">继续</string>
+    <string name="cancel">取消</string>
+    
+    <!-- Report -->
+    <string name="violation_details">违章详情</string>
+    <string name="license_plate">车牌号</string>
+    <string name="violation_time">违章时间</string>
+    <string name="screenshots">截图</string>
+    <string name="export_report">导出报告</string>
+    <string name="share">分享</string>
+    
+    <!-- Settings -->
+    <string name="sensitivity">检测灵敏度</string>
+    <string name="output_directory">输出目录</string>
+    <string name="model_management">模型管理</string>
+    <string name="about">关于</string>
+    
+    <!-- Permissions -->
+    <string name="permission_required">需要权限</string>
+    <string name="storage_permission_rationale">需要存储权限来读取视频文件</string>
+    <string name="grant_permission">授予权限</string>
+    
+    <!-- Errors -->
+    <string name="error_video_not_found">视频文件不存在</string>
+    <string name="error_decode_failed">视频解码失败</string>
+    <string name="error_model_load_failed">模型加载失败</string>
+    <string name="error_storage_full">存储空间不足</string>
+    <string name="retry">重试</string>
+</resources>
