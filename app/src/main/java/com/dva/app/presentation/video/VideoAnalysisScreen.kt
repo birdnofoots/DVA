@@ -279,7 +279,7 @@ fun VideoAnalysisScreen(
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            text = uiState.errorMessage,
+                            text = uiState.errorMessage ?: "",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
