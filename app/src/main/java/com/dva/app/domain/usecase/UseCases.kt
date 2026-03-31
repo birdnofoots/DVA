@@ -3,9 +3,12 @@ package com.dva.app.domain.usecase
 import com.dva.app.domain.model.*
 import com.dva.app.domain.repository.VideoRepository
 import com.dva.app.domain.repository.ViolationRepository
+import com.dva.app.infrastructure.ml.PlateRecognizer
+import com.dva.app.infrastructure.ml.VehicleDetector
+import com.dva.app.infrastructure.ml.LaneDetector
+import com.dva.app.infrastructure.ml.ViolationAnalyzer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import java.io.File
 
 /**
  * 扫描视频目录用例
@@ -102,7 +105,7 @@ class AnalyzeVideoUseCase(
                         violationType = violation.type,
                         plateNumber = plateResult?.plateNumber,
                         plateConfidence = plateResult?.confidence ?: 0f,
-                        timestamp = videoInfo.durationMs * violation.frameIndex / videoInfo.frameCount,
+                        timestamp = (videoInfo.durationMs * violation.frameIndex) / videoInfo.frameCount,
                         frameIndex = violation.frameIndex,
                         beforeImagePath = "", // 后续保存
                         duringImagePath = "", // 后续保存
