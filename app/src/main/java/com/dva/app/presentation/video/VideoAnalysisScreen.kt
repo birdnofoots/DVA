@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -35,7 +36,13 @@ fun VideoAnalysisScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("分析中: $videoName") },
+                title = { 
+                    Text(
+                        text = "分析中: $videoName",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    ) 
+                },
                 navigationIcon = {
                     IconButton(onClick = { 
                         viewModel.cancelAnalysis()
@@ -56,6 +63,35 @@ fun VideoAnalysisScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            // 错误提示
+            uiState.errorMessage?.let { error ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Error,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+            
             // 进度区域
             Card(
                 modifier = Modifier
@@ -94,7 +130,7 @@ fun VideoAnalysisScreen(
                     Text(
                         text = when {
                             uiState.isComplete -> "分析完成"
-                            uiState.isAnalyzing -> "正在分析第 ${uiState.currentFrame} 帧..."
+                            uiState.isAnalyzing -> "正在分析第 ${uiState.currentFrame}/${uiState.totalFrames} 帧..."
                             else -> "准备中..."
                         },
                         style = MaterialTheme.typography.bodySmall,
@@ -131,6 +167,51 @@ fun VideoAnalysisScreen(
                     label = "已分析帧",
                     color = MaterialTheme.colorScheme.tertiary
                 )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // 日志区域
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .heightIn(max = 150.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "分析日志",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Icon(
+                            Icons.Default.Terminal,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(
+                        modifier = Modifier.weight(1f, fill = false)
+                    ) {
+                        items(uiState.logMessages.takeLast(20)) { log ->
+                            Text(
+                                text = log,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                color = if (log.contains("错误") || log.contains("失败")) 
+                                    MaterialTheme.colorScheme.error 
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -176,6 +257,32 @@ fun VideoAnalysisScreen(
                 ) {
                     items(uiState.violations) { violation ->
                         ViolationCard(violation = violation)
+                    }
+                }
+            } else if (uiState.errorMessage != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "分析出错",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = uiState.errorMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             } else {
