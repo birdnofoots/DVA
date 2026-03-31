@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import com.dva.app.domain.model.VideoFile
 import com.dva.app.presentation.AppViewModel
 import com.dva.app.presentation.GlobalVideoState
+import androidx.hilt.navigation.compose.hiltViewModel
 
 /**
  * 视频列表页面
