@@ -29,3 +29,10 @@ jobs:
         run: ./gradlew assembleDebug --no-daemon --stacktrace
         env:
           TERM: dumb
+      
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: DVA-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
