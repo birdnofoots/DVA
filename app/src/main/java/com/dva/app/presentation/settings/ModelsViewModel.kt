@@ -3,6 +3,7 @@ package com.dva.app.presentation.settings
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dva.app.data.local.storage.ModelDownloader
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +23,7 @@ data class MLModel(
     val purpose: String,
     val fileSize: Long,
     val downloadUrl: String,
+    val localFileName: String,
     val localPath: String?,
     val isDownloaded: Boolean,
     val isDownloading: Boolean = false,
@@ -48,11 +50,9 @@ class ModelsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ModelsUiState())
     val uiState: StateFlow<ModelsUiState> = _uiState.asStateFlow()
     
-    // assets/models 目录
-    private val modelsDir = File(context.filesDir, "models")
+    private val modelDownloader = ModelDownloader(context)
     
     init {
-        modelsDir.mkdirs()
         loadModels()
     }
     
@@ -67,42 +67,35 @@ class ModelsViewModel @Inject constructor(
                 MLModel(
                     id = "yolov8n-vehicle",
                     name = "YOLOv8n (车辆检测)",
-                    description = "YOLOv8n 模型，用于检测车辆、行人等目标",
+                    description = "YOLOv8n 模型，用于检测车辆、行人等目标。是最轻量的 YOLOv8 模型，适合移动端运行。",
                     purpose = "车辆检测",
                     fileSize = 12_851_049, // 12.3 MB
-                    downloadUrl = "",
+                    downloadUrl = "https://github.com/birdnofoots/DVA/releases/download/models/yolov8n-vehicle.onnx",
+                    localFileName = "yolov8n-vehicle.onnx",
                     localPath = getLocalModelPath("yolov8n-vehicle.onnx"),
-                    isDownloaded = checkModelExists("yolov8n-vehicle.onnx")
+                    isDownloaded = modelDownloader.isModelDownloaded("yolov8n-vehicle.onnx")
                 ),
                 MLModel(
                     id = "lanenet",
                     name = "LaneNet (车道线检测)",
-                    description = "车道线检测模型，用于识别道路车道线",
-                    purpose = "变道检测",
+                    description = "车道线检测模型，用于识别道路车道线。结合车辆检测可以判断车辆是否变道。",
+                    purpose = "车道线检测",
                     fileSize = 50_000_000, // 估算 50MB
                     downloadUrl = "https://github.com/birdnofoots/DVA/releases/download/models/lanenet.onnx",
+                    localFileName = "lanenet.onnx",
                     localPath = getLocalModelPath("lanenet.onnx"),
-                    isDownloaded = checkModelExists("lanenet.onnx")
+                    isDownloaded = modelDownloader.isModelDownloaded("lanenet.onnx")
                 ),
                 MLModel(
                     id = "lprnet",
                     name = "LPRNet (车牌识别)",
-                    description = "中文车牌识别模型，识别中国大陆车牌",
+                    description = "中文车牌识别模型，识别中国大陆蓝色、绿色车牌。轻量级模型，适合移动端。",
                     purpose = "车牌识别",
                     fileSize = 30_000_000, // 估算 30MB
                     downloadUrl = "https://github.com/birdnofoots/DVA/releases/download/models/lprnet.onnx",
+                    localFileName = "lprnet.onnx",
                     localPath = getLocalModelPath("lprnet.onnx"),
-                    isDownloaded = checkModelExists("lprnet.onnx")
-                ),
-                MLModel(
-                    id = "paddleocr",
-                    name = "PaddleOCR (文字识别)",
-                    description = "通用文字识别，可作为车牌识别的备选方案",
-                    purpose = "车牌识别（备选）",
-                    fileSize = 100_000_000, // 估算 100MB
-                    downloadUrl = "https://github.com/PaddlePaddle/PaddleOCR/blob/release/2.7/models/ch_PP-OCRv4_det_infer.tar",
-                    localPath = getLocalModelPath("paddleocr"),
-                    isDownloaded = checkPaddleOCRExists()
+                    isDownloaded = modelDownloader.isModelDownloaded("lprnet.onnx")
                 )
             )
             
@@ -120,31 +113,62 @@ class ModelsViewModel @Inject constructor(
         viewModelScope.launch {
             val model = _uiState.value.models.find { it.id == modelId } ?: return@launch
             
+            if (model.downloadUrl.isEmpty()) {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "此模型暂无下载链接"
+                )
+                return@launch
+            }
+            
             // 更新状态为下载中
             updateModelState(modelId, isDownloading = true, downloadProgress = 0)
             
-            // 模拟下载进度（实际应该用真实的下载库）
-            // TODO: 实现真实的模型下载
-            simulateDownload(modelId)
+            // 执行下载
+            modelDownloader.download(
+                url = model.downloadUrl,
+                fileName = model.localFileName,
+                onProgress = { progress ->
+                    updateModelState(modelId, downloadProgress = progress)
+                }
+            ).onSuccess { file ->
+                // 下载完成
+                updateModelState(
+                    modelId,
+                    isDownloading = false,
+                    isDownloaded = true,
+                    downloadProgress = 100
+                )
+            }.onFailure { error ->
+                // 下载失败
+                updateModelState(
+                    modelId,
+                    isDownloading = false,
+                    isDownloaded = false,
+                    downloadProgress = 0
+                )
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "下载失败: ${error.message}"
+                )
+            }
         }
     }
     
     /**
-     * 模拟下载进度
+     * 删除模型
      */
-    private suspend fun simulateDownload(modelId: String) {
-        for (progress in 0..100 step 10) {
-            kotlinx.coroutines.delay(500)
-            updateModelState(modelId, downloadProgress = progress)
+    fun deleteModel(modelId: String) {
+        viewModelScope.launch {
+            val model = _uiState.value.models.find { it.id == modelId } ?: return@launch
+            
+            val deleted = modelDownloader.deleteModel(model.localFileName)
+            if (deleted) {
+                updateModelState(modelId, isDownloaded = false)
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "删除模型失败"
+                )
+            }
         }
-        
-        // 下载完成
-        updateModelState(
-            modelId, 
-            isDownloading = false, 
-            isDownloaded = true, 
-            downloadProgress = 100
-        )
     }
     
     /**
@@ -174,37 +198,27 @@ class ModelsViewModel @Inject constructor(
      * 获取本地模型路径
      */
     private fun getLocalModelPath(fileName: String): String {
-        return File(modelsDir, fileName).absolutePath
+        return modelDownloader.getModelPath(fileName)
     }
     
     /**
-     * 检查模型是否存在
+     * 清除错误消息
      */
-    private fun checkModelExists(fileName: String): Boolean {
-        return File(modelsDir, fileName).exists()
+    fun clearError() {
+        _uiState.value = _uiState.value.copy(errorMessage = null)
     }
     
     /**
-     * 检查 PaddleOCR 是否存在
+     * 获取已下载模型的可用状态
      */
-    private fun checkPaddleOCRExists(): Boolean {
-        return File(modelsDir, "paddleocr").isDirectory
+    fun getAvailableModels(): List<MLModel> {
+        return _uiState.value.models.filter { it.isDownloaded }
     }
     
     /**
-     * 删除模型
+     * 检查特定模型是否可用
      */
-    fun deleteModel(modelId: String) {
-        viewModelScope.launch {
-            val model = _uiState.value.models.find { it.id == modelId } ?: return@launch
-            
-            model.localPath?.let { path ->
-                if (File(path).exists()) {
-                    File(path).delete()
-                }
-            }
-            
-            updateModelState(modelId, isDownloaded = false)
-        }
+    fun isModelAvailable(modelId: String): Boolean {
+        return _uiState.value.models.find { it.id == modelId }?.isDownloaded == true
     }
 }

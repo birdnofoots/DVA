@@ -23,6 +23,18 @@ fun ModelsScreen(
     onBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    
+    // 显示错误消息
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let { message ->
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short
+            )
+            viewModel.clearError()
+        }
+    }
     
     Scaffold(
         topBar = {
@@ -38,7 +50,8 @@ fun ModelsScreen(
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -145,26 +158,33 @@ fun ModelCard(
                 }
                 
                 // 状态标签
-                AssistChip(
-                    onClick = { },
-                    label = {
-                        Text(
-                            text = when {
-                                model.isDownloaded -> "已下载"
-                                model.isDownloading -> "下载中"
-                                else -> "未下载"
-                            },
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = when {
-                            model.isDownloaded -> MaterialTheme.colorScheme.primaryContainer
-                            model.isDownloading -> MaterialTheme.colorScheme.tertiaryContainer
-                            else -> MaterialTheme.colorScheme.surfaceVariant
-                        }
+                if (model.isDownloading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
                     )
-                )
+                } else {
+                    AssistChip(
+                        onClick = { },
+                        label = {
+                            Text(
+                                text = when {
+                                    model.isDownloaded -> "已下载"
+                                    model.downloadProgress > 0 -> "${model.downloadProgress}%"
+                                    else -> "未下载"
+                                },
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = when {
+                                model.isDownloaded -> MaterialTheme.colorScheme.primaryContainer
+                                model.isDownloading -> MaterialTheme.colorScheme.tertiaryContainer
+                                else -> MaterialTheme.colorScheme.surfaceVariant
+                            }
+                        )
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -194,19 +214,34 @@ fun ModelCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                
+                if (model.localPath != null && model.isDownloaded) {
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Icon(
+                        imageVector = Icons.Default.Folder,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "已保存到本地",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
             
             // 下载进度条
             if (model.isDownloading) {
                 Spacer(modifier = Modifier.height(12.dp))
-                @Suppress("DEPRECATION")
                 LinearProgressIndicator(
-                    progress = model.downloadProgress / 100f,
+                    progress = { (model.downloadProgress / 100f).coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "${model.downloadProgress}%",
+                    text = "下载中... ${model.downloadProgress}%",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -234,15 +269,37 @@ fun ModelCard(
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("删除")
                     }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Button(
+                        onClick = { /* 重新下载 */ },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("重新下载")
+                    }
                 } else if (!model.isDownloading) {
-                    Button(onClick = onDownload) {
+                    Button(
+                        onClick = onDownload,
+                        enabled = model.downloadUrl.isNotEmpty()
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Download,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("下载")
+                        Text(
+                            if (model.downloadUrl.isEmpty()) "暂不可用" else "下载"
+                        )
                     }
                 }
             }
@@ -258,6 +315,7 @@ private fun formatFileSize(bytes: Long): String {
         bytes >= 1024 * 1024 * 1024 -> String.format("%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0))
         bytes >= 1024 * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
         bytes >= 1024 -> String.format("%.1f KB", bytes / 1024.0)
+        bytes == 0L -> "未知大小"
         else -> "$bytes B"
     }
 }
