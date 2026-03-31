@@ -60,7 +60,7 @@ fun HomeScreen(
             
             // 保存到全局状态
             GlobalVideoState.setSelectedFolderUri(selectedUri)
-            GlobalVideoState.setLoading(true)
+            GlobalVideoState.updateLoading(true)
             
             // 触发扫描 - 使用 HomeViewModel
             viewModel.scanVideosFromUri(selectedUri)
@@ -113,11 +113,11 @@ fun HomeScreen(
         }
         
         // 视频列表
-        if (videosList.isNotEmpty()) {
+        if (videos.isNotEmpty()) {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(videosList) { video ->
+                items(videos) { video ->
                     VideoItem(
                         video = video,
                         onAnalyze = { onVideoSelected(video.path) }

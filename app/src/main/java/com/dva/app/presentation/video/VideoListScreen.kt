@@ -61,7 +61,7 @@ fun VideoListScreen(
             }
             
             GlobalVideoState.setSelectedFolderUri(selectedUri)
-            GlobalVideoState.setLoading(true)
+            GlobalVideoState.updateLoading(true)
             viewModel.scanVideosFromUri(selectedUri)
         }
     }
