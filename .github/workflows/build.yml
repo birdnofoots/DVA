@@ -23,29 +23,33 @@ jobs:
           cache: 'gradle'
       
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v2
+        run: |
+          mkdir -p $HOME/android-sdk
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+      
+      - name: Download Android command line tools
+        run: |
+          cd $HOME/android-sdk
+          if [ ! -f "cmdline-tools/latest/bin/sdkmanager" ]; then
+            wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+            unzip -q cmdline-tools.zip
+            mkdir -p cmdline-tools/latest
+            mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+            rm cmdline-tools.zip
+          fi
+      
+      - name: Accept licenses
+        run: |
+          yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+          yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" > /dev/null 2>&1 || true
       
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
       
       - name: Build with Gradle
-        run: ./gradlew assembleDebug --no-daemon
-      
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: DVA-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 7
-      
-      - name: Build with Gradle (Release)
-        run: ./gradlew assembleRelease --no-daemon
-        if: github.ref == 'refs/heads/master'
-      
-      - name: Upload Release APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: DVA-release-apk
-          path: app/build/outputs/apk/release/*.apk
-          retention-days: 7
-        if: github.ref == 'refs/heads/master'
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        env:
+          ANDROID_HOME: $HOME/android-sdk
+          ANDROID_SDK_ROOT: $HOME/android-sdk
+          TERM: dumb
