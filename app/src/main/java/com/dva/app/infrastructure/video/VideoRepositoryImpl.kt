@@ -1,10 +1,13 @@
 package com.dva.app.infrastructure.video
 
 import android.content.Context
+import android.database.Cursor
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
+import android.net.Uri
+import android.provider.DocumentsContract
 import com.dva.app.domain.model.VideoFile
 import com.dva.app.domain.model.VideoProcessingState
 import com.dva.app.domain.model.ProcessingStatus
@@ -40,6 +43,114 @@ class VideoRepositoryImpl(
         }?.mapNotNull { file ->
             getVideoInfo(file.absolutePath)
         } ?: emptyList()
+    }
+    
+    /**
+     * 使用 SAF URI 扫描视频文件
+     */
+    override suspend fun scanUri(uri: Uri): List<VideoFile> = withContext(Dispatchers.IO) {
+        val videos = mutableListOf<VideoFile>()
+        
+        // 使用 DocumentFile 遍历目录
+        val documentFile = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, uri)
+        
+        documentFile?.listFiles()?.forEach { file ->
+            if (file.isFile && isVideoFile(file.name ?: "")) {
+                // 获取视频信息
+                val videoInfo = getVideoInfoFromUri(file.uri)
+                if (videoInfo != null) {
+                    videos.add(videoInfo)
+                }
+            }
+        }
+        
+        videos
+    }
+    
+    /**
+     * 从 URI 获取视频信息（SAF 方式）
+     */
+    private suspend fun getVideoInfoFromUri(uri: Uri): VideoFile? = withContext(Dispatchers.IO) {
+        try {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(context, uri)
+            
+            val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0
+            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            
+            retriever.release()
+            
+            // 从 URI 获取文件名
+            val fileName = getFileNameFromUri(uri) ?: "unknown"
+            
+            // 获取文件大小
+            val fileSize = getFileSizeFromUri(uri)
+            
+            VideoFile(
+                path = uri.toString(), // 使用 URI 作为路径
+                name = fileName,
+                durationMs = durationMs,
+                width = if (rotation == 90 || rotation == 270) height else width,
+                height = if (rotation == 90 || rotation == 270) width else height,
+                fps = 25f, // SAF 无法直接获取帧率，使用默认值
+                frameCount = ((durationMs / 1000.0) * 25).toInt(),
+                fileSize = fileSize
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    /**
+     * 从 URI 获取文件名
+     */
+    private fun getFileNameFromUri(uri: Uri): String? {
+        var cursor: Cursor? = null
+        return try {
+            cursor = context.contentResolver.query(uri, null, null, null, null)
+            if (cursor != null && cursor.moveToFirst()) {
+                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (nameIndex >= 0) {
+                    cursor.getString(nameIndex)
+                } else null
+            } else null
+        } catch (e: Exception) {
+            // Fallback: 从 URI 解析
+            uri.lastPathSegment
+        } finally {
+            cursor?.close()
+        }
+    }
+    
+    /**
+     * 从 URI 获取文件大小
+     */
+    private fun getFileSizeFromUri(uri: Uri): Long {
+        var cursor: Cursor? = null
+        return try {
+            cursor = context.contentResolver.query(uri, null, null, null, null)
+            if (cursor != null && cursor.moveToFirst()) {
+                val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                if (sizeIndex >= 0) {
+                    cursor.getLong(sizeIndex)
+                } else 0L
+            } else 0L
+        } catch (e: Exception) {
+            0L
+        } finally {
+            cursor?.close()
+        }
+    }
+    
+    /**
+     * 检查是否为视频文件
+     */
+    private fun isVideoFile(fileName: String): Boolean {
+        val videoExtensions = setOf("mp4", "mov", "avi", "mkv", "3gp", "webm", "3g2", "m4v")
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        return extension in videoExtensions
     }
     
     override suspend fun getVideoInfo(videoPath: String): VideoFile? = withContext(Dispatchers.IO) {

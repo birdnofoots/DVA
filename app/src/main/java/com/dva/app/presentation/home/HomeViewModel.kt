@@ -1,5 +1,6 @@
 package com.dva.app.presentation.home
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dva.app.domain.model.VideoFile
@@ -17,6 +18,7 @@ import javax.inject.Inject
 data class HomeUiState(
     val isLoading: Boolean = false,
     val selectedDirectory: String? = null,
+    val selectedFolderUri: String? = null,
     val videos: List<VideoFile> = emptyList(),
     val errorMessage: String? = null
 )
@@ -33,7 +35,43 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
     
     /**
-     * 扫描视频目录
+     * 保存选择的文件夹 URI
+     */
+    fun setSelectedFolderUri(uriString: String) {
+        _uiState.value = _uiState.value.copy(selectedFolderUri = uriString)
+    }
+    
+    /**
+     * 从 URI 扫描视频（使用 SAF）
+     */
+    fun scanVideosFromUri(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                selectedDirectory = uri.toString(),
+                errorMessage = null
+            )
+            
+            // 使用 content resolver 扫描
+            scanVideosUseCase.invoke(uri)
+                .onSuccess { videos ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        videos = videos,
+                        errorMessage = null
+                    )
+                }
+                .onFailure { error ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = error.message ?: "扫描失败"
+                    )
+                }
+        }
+    }
+    
+    /**
+     * 扫描视频目录（传统方式，使用文件路径）
      */
     fun scanVideos(directoryPath: String) {
         viewModelScope.launch {

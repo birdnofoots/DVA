@@ -30,16 +30,33 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     
-    // 文件选择器
+    // 文件选择器 - 使用 SAF 选择文件夹
     val folderPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
-        uri?.let {
-            // 将 URI 转换为路径
-            val path = uriToPath(context, uri)
-            if (path != null) {
-                viewModel.scanVideos(path)
+        uri?.let { selectedUri ->
+            // 授予持久化权限（Android 10+ 需要）
+            val takeFlags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or 
+                           android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            try {
+                context.contentResolver.takePersistableUriPermission(selectedUri, takeFlags)
+            } catch (e: SecurityException) {
+                // 可能只有读权限，尝试只获取读权限
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        selectedUri, 
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (e2: SecurityException) {
+                    // 权限获取失败，继续使用临时权限
+                }
             }
+            
+            // 保存 URI 到 DataStore（后续使用）
+            viewModel.setSelectedFolderUri(selectedUri.toString())
+            
+            // 扫描该文件夹
+            viewModel.scanVideosFromUri(selectedUri)
         }
     }
     

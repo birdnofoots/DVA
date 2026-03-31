@@ -111,6 +111,9 @@ dependencies {
 
     // DataStore for preferences
     implementation("androidx.datastore:datastore-preferences:1.0.0")
+    
+    // DocumentFile for SAF (Storage Access Framework)
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     // Media3 for video playback
     implementation("androidx.media3:media3-exoplayer:1.2.0")

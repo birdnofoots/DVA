@@ -1,5 +1,6 @@
 package com.dva.app.domain.repository
 
+import android.net.Uri
 import com.dva.app.domain.model.*
 import kotlinx.coroutines.flow.Flow
 
@@ -8,9 +9,14 @@ import kotlinx.coroutines.flow.Flow
  */
 interface VideoRepository {
     /**
-     * 扫描目录获取所有视频文件
+     * 扫描目录获取所有视频文件（使用文件路径）
      */
     suspend fun scanDirectory(directoryPath: String): List<VideoFile>
+    
+    /**
+     * 扫描 URI 获取所有视频文件（使用 SAF）
+     */
+    suspend fun scanUri(uri: Uri): List<VideoFile>
     
     /**
      * 获取视频信息

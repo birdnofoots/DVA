@@ -1,5 +1,6 @@
 package com.dva.app.domain.usecase
 
+import android.net.Uri
 import com.dva.app.domain.model.*
 import com.dva.app.domain.repository.VideoRepository
 import com.dva.app.domain.repository.ViolationRepository
@@ -16,9 +17,24 @@ import kotlinx.coroutines.flow.first
 class ScanVideosUseCase(
     private val videoRepository: VideoRepository
 ) {
+    /**
+     * 使用文件路径扫描（传统方式）
+     */
     suspend operator fun invoke(directoryPath: String): Result<List<VideoFile>> {
         return try {
             val videos = videoRepository.scanDirectory(directoryPath)
+            Result.success(videos)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 使用 Content URI 扫描（SAF 方式）
+     */
+    suspend fun invoke(uri: Uri): Result<List<VideoFile>> {
+        return try {
+            val videos = videoRepository.scanUri(uri)
             Result.success(videos)
         } catch (e: Exception) {
             Result.failure(e)
