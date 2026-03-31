@@ -25,7 +25,8 @@ import com.dva.app.domain.model.VideoFile
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    viewModel: HomeViewModel = hiltViewModel()
+    viewModel: HomeViewModel = hiltViewModel(),
+    onVideoSelected: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -120,7 +121,10 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(uiState.videos) { video ->
-                VideoItem(video = video)
+                VideoItem(
+                    video = video,
+                    onAnalyze = { onVideoSelected(video.path) }
+                )
             }
         }
         
@@ -155,7 +159,11 @@ fun HomeScreen(
 }
 
 @Composable
-fun VideoItem(video: VideoFile) {
+@Composable
+fun VideoItem(
+    video: VideoFile,
+    onAnalyze: () -> Unit = {}
+) {
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -190,7 +198,7 @@ fun VideoItem(video: VideoFile) {
                 )
             }
             
-            IconButton(onClick = { /* 开始分析 */ }) {
+            IconButton(onClick = onAnalyze) {
                 Icon(Icons.Default.PlayArrow, contentDescription = "分析")
             }
         }

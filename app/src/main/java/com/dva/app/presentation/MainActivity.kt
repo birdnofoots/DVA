@@ -5,18 +5,29 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import com.dva.app.presentation.home.HomeScreen
+import com.dva.app.presentation.home.HomeViewModel
+import com.dva.app.presentation.report.ReportScreen
+import com.dva.app.presentation.settings.ModelsScreen
+import com.dva.app.presentation.settings.SettingsScreen
 import com.dva.app.presentation.theme.DvaTheme
+import com.dva.app.presentation.video.VideoAnalysisScreen
+import com.dva.app.presentation.video.VideoListScreen
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
@@ -69,98 +80,112 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
+ * 导航目标
+ */
+sealed class Screen(val route: String, val title: String, val icon: @Composable () -> Unit) {
+    object Home : Screen("home", "首页", { Icon(Icons.Default.Home, contentDescription = null) })
+    object Videos : Screen("videos", "视频", { Icon(Icons.Default.VideoLibrary, contentDescription = null) })
+    object Report : Screen("report", "报告", { Icon(Icons.Default.Assessment, contentDescription = null) })
+    object Settings : Screen("settings", "设置", { Icon(Icons.Default.Settings, contentDescription = null) })
+    object Models : Screen("models", "模型管理", { Icon(Icons.Default.ModelTraining, contentDescription = null) })
+    object Analysis : Screen("analysis/{videoPath}", "分析", { Icon(Icons.Default.PlayArrow, contentDescription = null) }) {
+        fun createRoute(videoPath: String) = "analysis/$videoPath"
+    }
+}
+
+val bottomNavItems = listOf(
+    Screen.Home,
+    Screen.Videos,
+    Screen.Report,
+    Screen.Settings
+)
+
+/**
  * 主屏幕
  */
 @Composable
 fun MainScreen() {
-    var currentRoute by remember { mutableStateOf("home") }
+    val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
+    
+    // 判断是否显示底部导航
+    val showBottomBar = bottomNavItems.any { screen ->
+        currentDestination?.hierarchy?.any { it.route == screen.route } == true
+    }
     
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("DVA - 违章分析") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            // 导航栏
-            NavigationBar()
-            
-            // 页面内容
-            when (currentRoute) {
-                "home" -> HomeScreen()
-                "analysis" -> AnalysisScreen()
-                "report" -> ReportScreen()
-                "settings" -> SettingsScreen()
+        bottomBar = {
+            if (showBottomBar) {
+                NavigationBar {
+                    bottomNavItems.forEach { screen ->
+                        NavigationBarItem(
+                            icon = screen.icon,
+                            label = { Text(screen.title) },
+                            selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
+                            onClick = {
+                                navController.navigate(screen.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        )
+                    }
+                }
             }
         }
-    }
-}
-
-@Composable
-fun NavigationBar() {
-    NavigationBar {
-        NavigationBarItem(
-            icon = { Text("🏠") },
-            label = { Text("首页") },
-            selected = true,
-            onClick = {}
-        )
-        NavigationBarItem(
-            icon = { Text("🎬") },
-            label = { Text("视频") },
-            selected = false,
-            onClick = {}
-        )
-        NavigationBarItem(
-            icon = { Text("📊") },
-            label = { Text("报告") },
-            selected = false,
-            onClick = {}
-        )
-        NavigationBarItem(
-            icon = { Text("⚙️") },
-            label = { Text("设置") },
-            selected = false,
-            onClick = {}
-        )
-    }
-}
-
-@Composable
-fun AnalysisScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("视频分析页面 - 待实现")
-    }
-}
-
-@Composable
-fun ReportScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("报告页面 - 待实现")
-    }
-}
-
-@Composable
-fun SettingsScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("设置页面 - 待实现")
+    ) { paddingValues ->
+        NavHost(
+            navController = navController,
+            startDestination = Screen.Home.route,
+            modifier = Modifier.padding(paddingValues)
+        ) {
+            composable(Screen.Home.route) {
+                HomeScreen(
+                    onVideoSelected = { videoPath ->
+                        navController.navigate(Screen.Analysis.createRoute(videoPath))
+                    }
+                )
+            }
+            
+            composable(Screen.Videos.route) {
+                VideoListScreen(
+                    onVideoSelected = { videoPath ->
+                        navController.navigate(Screen.Analysis.createRoute(videoPath))
+                    }
+                )
+            }
+            
+            composable(Screen.Report.route) {
+                ReportScreen()
+            }
+            
+            composable(Screen.Settings.route) {
+                SettingsScreen(
+                    onNavigateToModels = {
+                        navController.navigate(Screen.Models.route)
+                    }
+                )
+            }
+            
+            composable(Screen.Models.route) {
+                ModelsScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            
+            composable(Screen.Analysis.route) { backStackEntry ->
+                val videoPath = backStackEntry.arguments?.getString("videoPath") ?: ""
+                val videoName = videoPath.substringAfterLast("/")
+                VideoAnalysisScreen(
+                    videoPath = videoPath,
+                    videoName = videoName,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+        }
     }
 }

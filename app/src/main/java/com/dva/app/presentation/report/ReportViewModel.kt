@@ -21,12 +21,12 @@ import javax.inject.Inject
 data class ReportUiState(
     val violations: List<ViolationRecord> = emptyList(),
     val isLoading: Boolean = false,
-    val exportPath: String? = null,
+    val exportedPath: String? = null,
     val errorMessage: String? = null
 )
 
 /**
- * 报告生成器
+ * 报告生成器 ViewModel
  */
 @HiltViewModel
 class ReportViewModel @Inject constructor(
@@ -84,7 +84,7 @@ class ReportViewModel @Inject constructor(
                 sb.appendLine()
                 sb.appendLine("${index + 1}. ${getViolationTypeName(violation.violationType)}")
                 sb.appendLine("   时间戳: ${dateFormat.format(Date(violation.timestamp))}")
-                sb.appendLine("   视频: ${violation.videoPath}")
+                sb.appendLine("   视频: ${violation.videoPath.substringAfterLast("/")}")
                 sb.appendLine("   帧号: ${violation.frameIndex}")
                 sb.appendLine("   置信度: ${(violation.confidence * 100).toInt()}%")
                 
@@ -110,9 +110,11 @@ class ReportViewModel @Inject constructor(
         return try {
             val reportContent = generateReport(violations)
             val fileName = "violation_report_${System.currentTimeMillis()}.txt"
-            val file = java.io.File(storageManager.getReportsDirectory(), fileName)
+            val reportsDir = storageManager.getReportsDirectory()
+            val file = java.io.File(reportsDir, fileName)
             file.writeText(reportContent)
-            _uiState.value = _uiState.value.copy(exportPath = file.absolutePath)
+            
+            _uiState.value = _uiState.value.copy(exportedPath = file.absolutePath)
             file.absolutePath
         } catch (e: Exception) {
             _uiState.value = _uiState.value.copy(errorMessage = e.message)

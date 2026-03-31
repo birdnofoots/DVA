@@ -1,5 +1,6 @@
 package com.dva.app.presentation.video
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dva.app.domain.model.VideoFile
@@ -18,6 +19,8 @@ data class VideoListUiState(
     val isLoading: Boolean = false,
     val videos: List<VideoFile> = emptyList(),
     val selectedVideo: VideoFile? = null,
+    val selectedDirectory: String? = null,
+    val selectedFolderUri: String? = null,
     val errorMessage: String? = null
 )
 
@@ -31,6 +34,41 @@ class VideoListViewModel @Inject constructor(
     
     private val _uiState = MutableStateFlow(VideoListUiState())
     val uiState: StateFlow<VideoListUiState> = _uiState.asStateFlow()
+    
+    /**
+     * 保存选择的文件夹 URI
+     */
+    fun setSelectedFolderUri(uriString: String) {
+        _uiState.value = _uiState.value.copy(selectedFolderUri = uriString)
+    }
+    
+    /**
+     * 从 URI 扫描视频
+     */
+    fun scanVideosFromUri(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                selectedDirectory = uri.toString(),
+                errorMessage = null
+            )
+            
+            scanVideosUseCase.invoke(uri)
+                .onSuccess { videos ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        videos = videos,
+                        errorMessage = null
+                    )
+                }
+                .onFailure { error ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = error.message ?: "扫描失败"
+                    )
+                }
+        }
+    }
     
     /**
      * 加载视频列表

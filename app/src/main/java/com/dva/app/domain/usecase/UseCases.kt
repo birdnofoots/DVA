@@ -189,3 +189,14 @@ class GetProcessingProgressUseCase(
         return videoRepository.observeProcessingState(videoPath)
     }
 }
+
+/**
+ * 获取视频信息用例
+ */
+class GetVideoInfoUseCase(
+    private val videoRepository: VideoRepository
+) {
+    suspend operator fun invoke(videoPath: String): VideoFile? {
+        return videoRepository.getVideoInfo(videoPath)
+    }
+}
