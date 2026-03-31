@@ -113,11 +113,11 @@ fun HomeScreen(
         }
         
         // 视频列表
-        if (videos.isNotEmpty()) {
+        if (videosList.isNotEmpty()) {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(videos) { video ->
+                items(videosList) { video ->
                     VideoItem(
                         video = video,
                         onAnalyze = { onVideoSelected(video.path) }
