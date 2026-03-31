@@ -235,8 +235,9 @@ fun ModelCard(
             // 下载进度条
             if (model.isDownloading) {
                 Spacer(modifier = Modifier.height(12.dp))
+                @Suppress("DEPRECATION")
                 LinearProgressIndicator(
-                    progress = { (model.downloadProgress / 100f).coerceIn(0f, 1f) },
+                    progress = (model.downloadProgress / 100f).coerceIn(0.0, 1.0).toFloat(),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(modifier = Modifier.height(4.dp))
