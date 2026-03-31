@@ -2,19 +2,19 @@ package com.dva.app.presentation
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -22,7 +22,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.dva.app.presentation.home.HomeScreen
-import com.dva.app.presentation.home.HomeViewModel
 import com.dva.app.presentation.report.ReportScreen
 import com.dva.app.presentation.settings.ModelsScreen
 import com.dva.app.presentation.settings.SettingsScreen
@@ -41,16 +40,13 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val allGranted = permissions.all { it.value }
-        if (!allGranted) {
-            Toast.makeText(this, "需要存储权限才能使用", Toast.LENGTH_LONG).show()
+        if (allGranted) {
+            // 权限授予成功
         }
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // 检查权限
-        checkAndRequestPermissions()
         
         setContent {
             DvaTheme {
@@ -63,34 +59,19 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-    
-    private fun checkAndRequestPermissions() {
-        val permissions = arrayOf(
-            Manifest.permission.READ_EXTERNAL_STORAGE,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
-        )
-        
-        val needsPermission = permissions.any {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-        
-        if (needsPermission) {
-            permissionLauncher.launch(permissions)
-        }
-    }
 }
 
 /**
  * 导航目标
  */
-sealed class Screen(val route: String, val title: String, val icon: @Composable () -> Unit) {
-    object Home : Screen("home", "首页", { Icon(Icons.Default.Home, contentDescription = null) })
-    object Videos : Screen("videos", "视频", { Icon(Icons.Default.VideoLibrary, contentDescription = null) })
-    object Report : Screen("report", "报告", { Icon(Icons.Default.Assessment, contentDescription = null) })
-    object Settings : Screen("settings", "设置", { Icon(Icons.Default.Settings, contentDescription = null) })
-    object Models : Screen("models", "模型管理", { Icon(Icons.Default.ModelTraining, contentDescription = null) })
-    object Analysis : Screen("analysis/{videoPath}", "分析", { Icon(Icons.Default.PlayArrow, contentDescription = null) }) {
-        fun createRoute(videoPath: String) = "analysis/$videoPath"
+sealed class Screen(val route: String, val title: String) {
+    object Home : Screen("home", "首页")
+    object Videos : Screen("videos", "视频")
+    object Report : Screen("report", "报告")
+    object Settings : Screen("settings", "设置")
+    object Models : Screen("models", "模型管理")
+    object Analysis : Screen("analysis/{videoPath}", "分析") {
+        fun createRoute(videoPath: String) = "analysis/${java.net.URLEncoder.encode(videoPath, "UTF-8")}"
     }
 }
 
@@ -102,13 +83,55 @@ val bottomNavItems = listOf(
 )
 
 /**
+ * 权限请求弹窗
+ */
+@Composable
+fun PermissionRequestDialog(
+    onPermissionGranted: () -> Unit
+) {
+    var showDialog by remember { mutableStateOf(true) }
+    
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("需要存储权限") },
+            text = { Text("DVA 需要访问存储设备才能读取行车记录仪视频。\n\n请授予存储权限以继续使用。") },
+            confirmButton = {
+                Button(onClick = {
+                    showDialog = false
+                    onPermissionGranted()
+                }) {
+                    Text("授予权限")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text("稍后")
+                }
+            }
+        )
+    }
+}
+
+/**
  * 主屏幕
  */
 @Composable
-fun MainScreen() {
+fun MainScreen(
+    appViewModel: AppViewModel = hiltViewModel()
+) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+    
+    // 检查存储权限
+    var hasStoragePermission by remember { mutableStateOf(false) }
+    
+    // 初始化时检查权限状态
+    LaunchedEffect(Unit) {
+        // 通过 LocalContext 检查权限
+        hasStoragePermission = true // 默认设为 true，因为 SAF 不需要传统权限
+    }
     
     // 判断是否显示底部导航
     val showBottomBar = bottomNavItems.any { screen ->
@@ -121,7 +144,15 @@ fun MainScreen() {
                 NavigationBar {
                     bottomNavItems.forEach { screen ->
                         NavigationBarItem(
-                            icon = screen.icon,
+                            icon = { 
+                                when (screen) {
+                                    Screen.Home -> Icon(Icons.Default.Home, contentDescription = null)
+                                    Screen.Videos -> Icon(Icons.Default.VideoLibrary, contentDescription = null)
+                                    Screen.Report -> Icon(Icons.Default.Assessment, contentDescription = null)
+                                    Screen.Settings -> Icon(Icons.Default.Settings, contentDescription = null)
+                                    else -> Icon(Icons.Default.QuestionMark, contentDescription = null)
+                                }
+                            },
                             label = { Text(screen.title) },
                             selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                             onClick = {
@@ -146,6 +177,7 @@ fun MainScreen() {
         ) {
             composable(Screen.Home.route) {
                 HomeScreen(
+                    appViewModel = appViewModel,
                     onVideoSelected = { videoPath ->
                         navController.navigate(Screen.Analysis.createRoute(videoPath))
                     }
@@ -154,6 +186,7 @@ fun MainScreen() {
             
             composable(Screen.Videos.route) {
                 VideoListScreen(
+                    appViewModel = appViewModel,
                     onVideoSelected = { videoPath ->
                         navController.navigate(Screen.Analysis.createRoute(videoPath))
                     }
@@ -179,7 +212,8 @@ fun MainScreen() {
             }
             
             composable(Screen.Analysis.route) { backStackEntry ->
-                val videoPath = backStackEntry.arguments?.getString("videoPath") ?: ""
+                val encodedPath = backStackEntry.arguments?.getString("videoPath") ?: ""
+                val videoPath = java.net.URLDecoder.decode(encodedPath, "UTF-8")
                 val videoName = videoPath.substringAfterLast("/")
                 VideoAnalysisScreen(
                     videoPath = videoPath,

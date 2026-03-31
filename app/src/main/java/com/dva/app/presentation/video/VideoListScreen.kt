@@ -16,8 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import com.dva.app.domain.model.VideoFile
+import com.dva.app.presentation.AppViewModel
+import com.dva.app.presentation.GlobalVideoState
 
 /**
  * 视频列表页面
@@ -25,11 +26,16 @@ import com.dva.app.domain.model.VideoFile
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VideoListScreen(
-    viewModel: VideoListViewModel = hiltViewModel(),
+    appViewModel: AppViewModel? = null,
     onVideoSelected: (String) -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    
+    // 使用全局状态
+    val selectedUri = GlobalVideoState.selectedFolderUri
+    val videos = GlobalVideoState.videos
+    val isLoading = GlobalVideoState.isLoading
+    val errorMessage = GlobalVideoState.errorMessage
     
     // 文件选择器
     val folderPicker = rememberLauncherForActivityResult(
@@ -52,8 +58,9 @@ fun VideoListScreen(
                 }
             }
             
-            viewModel.setSelectedFolderUri(selectedUri.toString())
-            viewModel.scanVideosFromUri(selectedUri)
+            GlobalVideoState.setSelectedFolderUri(selectedUri)
+            GlobalVideoState.setLoading(true)
+            appViewModel?.scanVideosFromUri(selectedUri)
         }
     }
     
@@ -86,9 +93,9 @@ fun VideoListScreen(
             }
             
             // 状态信息
-            if (uiState.selectedDirectory != null) {
+            if (selectedUri != null) {
                 Text(
-                    text = "已选择: ${uiState.selectedFolderUri?.substringAfterLast("/") ?: uiState.selectedDirectory}",
+                    text = "已选择: ${getFolderName(selectedUri)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp)
@@ -96,21 +103,21 @@ fun VideoListScreen(
             }
             
             Text(
-                text = "${uiState.videos.size} 个视频",
+                text = "${videos.size} 个视频",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
             
             // 加载状态
-            if (uiState.isLoading) {
+            if (isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator()
                 }
-            } else if (uiState.videos.isEmpty()) {
+            } else if (videos.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -140,7 +147,7 @@ fun VideoListScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(uiState.videos) { video ->
+                    items(videos) { video ->
                         VideoListItem(
                             video = video,
                             onClick = { onVideoSelected(video.path) }
@@ -150,7 +157,7 @@ fun VideoListScreen(
             }
             
             // 错误提示
-            uiState.errorMessage?.let { error ->
+            errorMessage?.let { error ->
                 Card(
                     modifier = Modifier.padding(16.dp),
                     colors = CardDefaults.cardColors(
@@ -175,6 +182,16 @@ fun VideoListScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun getFolderName(uriString: String?): String {
+    if (uriString == null) return ""
+    return try {
+        Uri.parse(uriString).lastPathSegment ?: uriString
+    } catch (e: Exception) {
+        uriString
     }
 }
 

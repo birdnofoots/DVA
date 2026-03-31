@@ -49,24 +49,40 @@ class VideoAnalysisViewModel @Inject constructor(
      * 获取视频信息并准备分析
      */
     fun startAnalysis(videoPath: String) {
-        viewModelScope.launch {
-            // 获取视频信息
-            val videoInfo = getVideoInfoUseCase(videoPath)
+        if (videoPath.isBlank()) {
             _uiState.value = _uiState.value.copy(
-                videoInfo = videoInfo,
-                totalFrames = videoInfo?.frameCount ?: 0,
-                isAnalyzing = true
+                errorMessage = "视频路径无效"
+            )
+            return
+        }
+        
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isAnalyzing = true,
+                errorMessage = null
             )
             
-            // 开始分析
-            analysisJob = launch {
+            try {
+                // 获取视频信息
+                val videoInfo = getVideoInfoUseCase(videoPath)
+                val totalFrames = videoInfo?.frameCount ?: 0
+                
+                _uiState.value = _uiState.value.copy(
+                    videoInfo = videoInfo,
+                    totalFrames = totalFrames,
+                    isAnalyzing = true
+                )
+                
+                // 开始分析
                 analyzeVideoUseCase(
                     videoPath = videoPath,
                     onProgress = { progress ->
+                        val safeProgress = progress.coerceIn(0, 100)
+                        val currentFrame = (safeProgress * totalFrames) / 100
                         _uiState.value = _uiState.value.copy(
-                            progress = progress,
-                            currentFrame = (progress * (videoInfo?.frameCount ?: 100)) / 100,
-                            analyzedFrames = (progress * (videoInfo?.frameCount ?: 100)) / 100
+                            progress = safeProgress,
+                            currentFrame = currentFrame,
+                            analyzedFrames = currentFrame
                         )
                     }
                 ).onSuccess { violations ->
@@ -74,15 +90,22 @@ class VideoAnalysisViewModel @Inject constructor(
                         isAnalyzing = false,
                         isComplete = true,
                         progress = 100,
+                        currentFrame = totalFrames,
+                        analyzedFrames = totalFrames,
                         violationCount = violations.size,
                         violations = violations
                     )
                 }.onFailure { error ->
                     _uiState.value = _uiState.value.copy(
                         isAnalyzing = false,
-                        errorMessage = error.message
+                        errorMessage = error.message ?: "分析失败"
                     )
                 }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isAnalyzing = false,
+                    errorMessage = e.message ?: "获取视频信息失败"
+                )
             }
         }
     }

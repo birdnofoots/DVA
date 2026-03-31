@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dva.app.domain.model.VideoFile
 import com.dva.app.domain.usecase.ScanVideosUseCase
+import com.dva.app.presentation.GlobalVideoState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,6 +40,7 @@ class HomeViewModel @Inject constructor(
      */
     fun setSelectedFolderUri(uriString: String) {
         _uiState.value = _uiState.value.copy(selectedFolderUri = uriString)
+        GlobalVideoState.setSelectedFolderUriString(uriString)
     }
     
     /**
@@ -51,6 +53,8 @@ class HomeViewModel @Inject constructor(
                 selectedDirectory = uri.toString(),
                 errorMessage = null
             )
+            GlobalVideoState.setLoading(true)
+            GlobalVideoState.setError(null)
             
             // 使用 content resolver 扫描
             scanVideosUseCase.invoke(uri)
@@ -60,12 +64,17 @@ class HomeViewModel @Inject constructor(
                         videos = videos,
                         errorMessage = null
                     )
+                    // 同时更新全局状态
+                    GlobalVideoState.setVideos(videos)
+                    GlobalVideoState.setLoading(false)
                 }
                 .onFailure { error ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         errorMessage = error.message ?: "扫描失败"
                     )
+                    GlobalVideoState.setError(error.message)
+                    GlobalVideoState.setLoading(false)
                 }
         }
     }
@@ -80,6 +89,7 @@ class HomeViewModel @Inject constructor(
                 selectedDirectory = directoryPath,
                 errorMessage = null
             )
+            GlobalVideoState.setLoading(true)
             
             scanVideosUseCase(directoryPath)
                 .onSuccess { videos ->
@@ -88,12 +98,16 @@ class HomeViewModel @Inject constructor(
                         videos = videos,
                         errorMessage = null
                     )
+                    GlobalVideoState.setVideos(videos)
+                    GlobalVideoState.setLoading(false)
                 }
                 .onFailure { error ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         errorMessage = error.message ?: "扫描失败"
                     )
+                    GlobalVideoState.setError(error.message)
+                    GlobalVideoState.setLoading(false)
                 }
         }
     }
@@ -103,5 +117,6 @@ class HomeViewModel @Inject constructor(
      */
     fun clearError() {
         _uiState.value = _uiState.value.copy(errorMessage = null)
+        GlobalVideoState.setError(null)
     }
 }

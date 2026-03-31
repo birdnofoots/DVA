@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dva.app.domain.model.VideoFile
 import com.dva.app.domain.usecase.ScanVideosUseCase
+import com.dva.app.presentation.GlobalVideoState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,6 +41,7 @@ class VideoListViewModel @Inject constructor(
      */
     fun setSelectedFolderUri(uriString: String) {
         _uiState.value = _uiState.value.copy(selectedFolderUri = uriString)
+        GlobalVideoState.setSelectedFolderUriString(uriString)
     }
     
     /**
@@ -52,6 +54,8 @@ class VideoListViewModel @Inject constructor(
                 selectedDirectory = uri.toString(),
                 errorMessage = null
             )
+            GlobalVideoState.setLoading(true)
+            GlobalVideoState.setError(null)
             
             scanVideosUseCase.invoke(uri)
                 .onSuccess { videos ->
@@ -60,12 +64,16 @@ class VideoListViewModel @Inject constructor(
                         videos = videos,
                         errorMessage = null
                     )
+                    GlobalVideoState.setVideos(videos)
+                    GlobalVideoState.setLoading(false)
                 }
                 .onFailure { error ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         errorMessage = error.message ?: "扫描失败"
                     )
+                    GlobalVideoState.setError(error.message)
+                    GlobalVideoState.setLoading(false)
                 }
         }
     }
@@ -76,6 +84,7 @@ class VideoListViewModel @Inject constructor(
     fun loadVideos(directoryPath: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
+            GlobalVideoState.setLoading(true)
             
             scanVideosUseCase(directoryPath)
                 .onSuccess { videos ->
@@ -83,12 +92,16 @@ class VideoListViewModel @Inject constructor(
                         isLoading = false,
                         videos = videos
                     )
+                    GlobalVideoState.setVideos(videos)
+                    GlobalVideoState.setLoading(false)
                 }
                 .onFailure { error ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         errorMessage = error.message
                     )
+                    GlobalVideoState.setError(error.message)
+                    GlobalVideoState.setLoading(false)
                 }
         }
     }

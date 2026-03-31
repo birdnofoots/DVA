@@ -1,5 +1,10 @@
 package com.dva.app.presentation.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,8 +14,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 
 /**
  * 设置页面
@@ -20,7 +25,31 @@ import androidx.hilt.navigation.compose.hiltViewModel
 fun SettingsScreen(
     onNavigateToModels: () -> Unit = {}
 ) {
-    val uiState by remember { mutableStateOf(SettingsUiState()) }
+    val context = LocalContext.current
+    
+    // 截图保存路径选择器
+    val folderPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        uri?.let { selectedUri ->
+            // 授予持久化权限
+            val takeFlags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or 
+                           android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            try {
+                context.contentResolver.takePersistableUriPermission(selectedUri, takeFlags)
+            } catch (e: SecurityException) {
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        selectedUri, 
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (e2: SecurityException) {
+                    // 权限获取失败
+                }
+            }
+            // TODO: 保存选择的 URI 到 DataStore
+        }
+    }
     
     Scaffold(
         topBar = {
@@ -53,9 +82,9 @@ fun SettingsScreen(
             item {
                 SettingsItem(
                     icon = Icons.Default.Storage,
-                    title = "存储设置",
-                    subtitle = "管理截图和报告存储位置",
-                    onClick = { }
+                    title = "截图保存路径",
+                    subtitle = "选择保存截图的文件夹",
+                    onClick = { folderPicker.launch(null) }
                 )
             }
             
@@ -69,6 +98,21 @@ fun SettingsScreen(
                 )
             }
             
+            // 权限管理
+            item {
+                SettingsItem(
+                    icon = Icons.Default.Security,
+                    title = "应用权限",
+                    subtitle = "管理应用权限设置",
+                    onClick = {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                        context.startActivity(intent)
+                    }
+                )
+            }
+            
             // 关于
             item {
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
@@ -78,7 +122,7 @@ fun SettingsScreen(
                 SettingsItem(
                     icon = Icons.Default.Info,
                     title = "关于 DVA",
-                    subtitle = "版本 1.0.1",
+                    subtitle = "版本 1.3.0",
                     onClick = { }
                 )
             }
@@ -88,7 +132,10 @@ fun SettingsScreen(
                     icon = Icons.Default.Code,
                     title = "源代码",
                     subtitle = "GitHub: birdnofoots/DVA",
-                    onClick = { }
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/birdnofoots/DVA"))
+                        context.startActivity(intent)
+                    }
                 )
             }
             
@@ -97,7 +144,10 @@ fun SettingsScreen(
                     icon = Icons.Default.BugReport,
                     title = "问题反馈",
                     subtitle = "在 GitHub 上提交 Issue",
-                    onClick = { }
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/birdnofoots/DVA/issues"))
+                        context.startActivity(intent)
+                    }
                 )
             }
         }
@@ -146,7 +196,3 @@ fun SettingsItem(
         )
     }
 }
-
-data class SettingsUiState(
-    val version: String = "1.0.1"
-)
