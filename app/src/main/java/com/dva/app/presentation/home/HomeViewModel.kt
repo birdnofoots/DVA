@@ -53,8 +53,8 @@ class HomeViewModel @Inject constructor(
                 selectedDirectory = uri.toString(),
                 errorMessage = null
             )
-            GlobalVideoState.setLoading(true)
-            GlobalVideoState.setError(null)
+            GlobalVideoState.updateLoading(true)
+            GlobalVideoState.updateError(null)
             
             // 使用 content resolver 扫描
             scanVideosUseCase.invoke(uri)
@@ -65,16 +65,16 @@ class HomeViewModel @Inject constructor(
                         errorMessage = null
                     )
                     // 同时更新全局状态
-                    GlobalVideoState.setVideos(videos)
-                    GlobalVideoState.setLoading(false)
+                    GlobalVideoState.updateVideos(videos)
+                    GlobalVideoState.updateLoading(false)
                 }
                 .onFailure { error ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         errorMessage = error.message ?: "扫描失败"
                     )
-                    GlobalVideoState.setError(error.message)
-                    GlobalVideoState.setLoading(false)
+                    GlobalVideoState.updateError(error.message)
+                    GlobalVideoState.updateLoading(false)
                 }
         }
     }
@@ -89,7 +89,7 @@ class HomeViewModel @Inject constructor(
                 selectedDirectory = directoryPath,
                 errorMessage = null
             )
-            GlobalVideoState.setLoading(true)
+            GlobalVideoState.updateLoading(true)
             
             scanVideosUseCase(directoryPath)
                 .onSuccess { videos ->
@@ -98,16 +98,16 @@ class HomeViewModel @Inject constructor(
                         videos = videos,
                         errorMessage = null
                     )
-                    GlobalVideoState.setVideos(videos)
-                    GlobalVideoState.setLoading(false)
+                    GlobalVideoState.updateVideos(videos)
+                    GlobalVideoState.updateLoading(false)
                 }
                 .onFailure { error ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         errorMessage = error.message ?: "扫描失败"
                     )
-                    GlobalVideoState.setError(error.message)
-                    GlobalVideoState.setLoading(false)
+                    GlobalVideoState.updateError(error.message)
+                    GlobalVideoState.updateLoading(false)
                 }
         }
     }
@@ -117,6 +117,6 @@ class HomeViewModel @Inject constructor(
      */
     fun clearError() {
         _uiState.value = _uiState.value.copy(errorMessage = null)
-        GlobalVideoState.setError(null)
+        GlobalVideoState.updateError(null)
     }
 }

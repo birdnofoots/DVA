@@ -13,20 +13,17 @@ import com.dva.app.domain.model.VideoFile
 object GlobalVideoState {
     var selectedFolderUri: String? by mutableStateOf(null)
     
-    private var _videos: List<VideoFile> by mutableStateOf(emptyList())
-    var videos: List<VideoFile>
-        get() = _videos
-        set(value) { _videos = value }
+    private var _videosList by mutableStateOf<List<VideoFile>>(emptyList())
+    val videosList: List<VideoFile>
+        get() = _videosList
     
-    private var _isLoading: Boolean by mutableStateOf(false)
-    var isLoading: Boolean
-        get() = _isLoading
-        set(value) { _isLoading = value }
+    private var _loading by mutableStateOf(false)
+    val isLoading: Boolean
+        get() = _loading
     
-    private var _errorMessage: String? by mutableStateOf(null)
-    var errorMessage: String?
-        get() = _errorMessage
-        set(value) { _errorMessage = value }
+    private var _error by mutableStateOf<String?>(null)
+    val errorMessage: String?
+        get() = _error
     
     fun setSelectedFolderUri(uri: Uri) {
         selectedFolderUri = uri.toString()
@@ -36,22 +33,22 @@ object GlobalVideoState {
         selectedFolderUri = uriString
     }
     
-    fun setVideos(videoList: List<VideoFile>) {
-        _videos = videoList
+    fun updateVideos(list: List<VideoFile>) {
+        _videosList = list
     }
     
-    fun setLoading(loading: Boolean) {
-        _isLoading = loading
+    fun updateLoading(loading: Boolean) {
+        _loading = loading
     }
     
-    fun setError(message: String?) {
-        _errorMessage = message
+    fun updateError(message: String?) {
+        _error = message
     }
     
     fun clear() {
         selectedFolderUri = null
-        _videos = emptyList()
-        _isLoading = false
-        _errorMessage = null
+        _videosList = emptyList()
+        _loading = false
+        _error = null
     }
 }

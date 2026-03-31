@@ -34,7 +34,7 @@ fun HomeScreen(
     
     // 使用全局状态
     val selectedUri = GlobalVideoState.selectedFolderUri
-    val videos = GlobalVideoState.videos
+    val videos = GlobalVideoState.videosList
     val isLoading = GlobalVideoState.isLoading
     
     // 文件选择器 - 使用 SAF 选择文件夹
