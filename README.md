@@ -500,3 +500,16 @@ _最后更新: 2026-03-31（完全重构）_
 - ✅ 修复 SAF 文件扫描问题
 - ✅ 修复多项 UI 编译错误
 
+
+---
+
+## 📥 下载试用（v1.2.0）
+
+### 最新版本
+- [DVA-v1.2.0-debug.apk](https://github.com/birdnofoots/DVA/releases/download/v1.0.0/DVA-v1.2.0-debug.apk) - 新增模型下载功能
+
+### 更新内容（v1.2.0）
+- ✅ 实现模型下载功能（ModelDownloader）
+- ✅ 实时下载进度显示
+- ✅ 模型删除和重新下载支持
+
