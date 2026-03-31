@@ -199,8 +199,9 @@ fun ModelCard(
             // 下载进度条
             if (model.isDownloading) {
                 Spacer(modifier = Modifier.height(12.dp))
+                val progressValue: Float = model.downloadProgress / 100f
                 LinearProgressIndicator(
-                    progress = { model.downloadProgress.toFloat() / 100f },
+                    progress = { progressValue },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(modifier = Modifier.height(4.dp))
