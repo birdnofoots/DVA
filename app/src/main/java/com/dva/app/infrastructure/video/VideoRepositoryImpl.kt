@@ -165,41 +165,28 @@ class VideoRepositoryImpl(
     
     /**
      * 使用 ContentResolver 直接查询
+     * 注意：此方法在某些设备上可能不可用
      */
     private suspend fun scanWithContentResolver(uri: Uri): List<VideoFile> = withContext(Dispatchers.IO) {
         val videos = mutableListOf<VideoFile>()
         
         try {
-            val childrenUri = android.provider.DocumentsContract.buildDocumentChildrenUri(
-                uri.authority ?: return@withContext videos,
-                android.provider.DocumentsContract.getTreeDocumentId(uri)
-            )
+            // 使用 ContentResolver.openInputStream 逐个检查文件
+            val documentFile = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, uri)
             
-            context.contentResolver.query(
-                childrenUri,
-                arrayOf(
-                    android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                    android.provider.DocumentsContract.Document.COLUMN_SIZE,
-                    android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE
-                ),
-                null,
-                null,
-                null
-            )?.use { cursor ->
-                val nameIdx = cursor.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-                val sizeIdx = cursor.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_SIZE)
-                val mimeIdx = cursor.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE)
-                
-                while (cursor.moveToNext()) {
-                    val name = if (nameIdx >= 0) cursor.getString(nameIdx) else null
-                    val size = if (sizeIdx >= 0) cursor.getLong(sizeIdx) else 0L
-                    val mime = if (mimeIdx >= 0) cursor.getString(mimeIdx) else null
-                    
-                    if (name != null && isVideoFile(name)) {
-                        val videoInfo = getVideoInfoFromUri(uri)
-                        if (videoInfo != null) {
-                            videos.add(videoInfo)
+            documentFile?.listFiles()?.forEach { file ->
+                if (file.isFile && isVideoFile(file.name ?: "")) {
+                    try {
+                        // 尝试打开输入流验证文件
+                        context.contentResolver.openInputStream(file.uri)?.use { stream ->
+                            // 文件可读，添加到列表
+                            val videoInfo = getVideoInfoFromUri(file.uri)
+                            if (videoInfo != null) {
+                                videos.add(videoInfo)
+                            }
                         }
+                    } catch (e: Exception) {
+                        // 文件无法打开，跳过
                     }
                 }
             }
