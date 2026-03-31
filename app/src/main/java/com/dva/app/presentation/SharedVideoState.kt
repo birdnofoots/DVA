@@ -12,16 +12,21 @@ import com.dva.app.domain.model.VideoFile
  */
 object GlobalVideoState {
     var selectedFolderUri: String? by mutableStateOf(null)
-        private set
     
-    var videos: List<VideoFile> by mutableStateOf(emptyList())
-        private set
+    private var _videos: List<VideoFile> by mutableStateOf(emptyList())
+    var videos: List<VideoFile>
+        get() = _videos
+        set(value) { _videos = value }
     
-    var isLoading: Boolean by mutableStateOf(false)
-        private set
+    private var _isLoading: Boolean by mutableStateOf(false)
+    var isLoading: Boolean
+        get() = _isLoading
+        set(value) { _isLoading = value }
     
-    var errorMessage: String? by mutableStateOf(null)
-        private set
+    private var _errorMessage: String? by mutableStateOf(null)
+    var errorMessage: String?
+        get() = _errorMessage
+        set(value) { _errorMessage = value }
     
     fun setSelectedFolderUri(uri: Uri) {
         selectedFolderUri = uri.toString()
@@ -32,21 +37,21 @@ object GlobalVideoState {
     }
     
     fun setVideos(videoList: List<VideoFile>) {
-        videos = videoList
+        _videos = videoList
     }
     
     fun setLoading(loading: Boolean) {
-        isLoading = loading
+        _isLoading = loading
     }
     
     fun setError(message: String?) {
-        errorMessage = message
+        _errorMessage = message
     }
     
     fun clear() {
         selectedFolderUri = null
-        videos = emptyList()
-        isLoading = false
-        errorMessage = null
+        _videos = emptyList()
+        _isLoading = false
+        _errorMessage = null
     }
 }
