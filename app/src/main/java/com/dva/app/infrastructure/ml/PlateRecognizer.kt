@@ -2,11 +2,6 @@ package com.dva.app.infrastructure.ml
 
 import android.content.Context
 import com.dva.app.domain.model.BoundingBox
-import org.onnxruntime.OnnxRuntime
-import org.onnxruntime.OrtEnvironment
-import org.onnxruntime.OrtSession
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /**
  * 车牌识别结果
