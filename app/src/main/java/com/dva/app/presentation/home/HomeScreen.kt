@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.dva.app.domain.model.VideoFile
 import com.dva.app.presentation.AppViewModel
 import com.dva.app.presentation.GlobalVideoState
@@ -26,6 +27,7 @@ import com.dva.app.presentation.GlobalVideoState
 @Composable
 fun HomeScreen(
     appViewModel: AppViewModel? = null,
+    viewModel: HomeViewModel = hiltViewModel(),
     onVideoSelected: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -60,8 +62,8 @@ fun HomeScreen(
             GlobalVideoState.setSelectedFolderUri(selectedUri)
             GlobalVideoState.setLoading(true)
             
-            // 触发扫描
-            appViewModel?.scanVideosFromUri(selectedUri)
+            // 触发扫描 - 使用 HomeViewModel
+            viewModel.scanVideosFromUri(selectedUri)
         }
     }
     

@@ -27,6 +27,7 @@ import com.dva.app.presentation.GlobalVideoState
 @Composable
 fun VideoListScreen(
     appViewModel: AppViewModel? = null,
+    viewModel: VideoListViewModel = hiltViewModel(),
     onVideoSelected: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -60,7 +61,7 @@ fun VideoListScreen(
             
             GlobalVideoState.setSelectedFolderUri(selectedUri)
             GlobalVideoState.setLoading(true)
-            appViewModel?.scanVideosFromUri(selectedUri)
+            viewModel.scanVideosFromUri(selectedUri)
         }
     }
     
