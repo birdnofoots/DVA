@@ -83,9 +83,9 @@ fun VideoAnalysisScreen(
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    val progressValue: Float = uiState.progress / 100f
+                    @Suppress("DEPRECATION")
                     LinearProgressIndicator(
-                        progress = { progressValue },
+                        progress = uiState.progress / 100f,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     
