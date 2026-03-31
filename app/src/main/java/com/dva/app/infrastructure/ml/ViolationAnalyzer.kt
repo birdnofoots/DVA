@@ -123,7 +123,7 @@ class LaneChangeViolationAnalyzer : ViolationAnalyzer {
         val direction = if (deltaX > 0) "右" else "左"
         
         // 简化置信度计算
-        val confidence = minOf(0.95f, (kotlin.math.abs(deltaX) / 100f).coerceAtMost(0.95f))
+        val confidence = minOf(0.95f, kotlin.math.abs(deltaX) / 100f)
         
         return LaneChangeResult(
             confidence = confidence,

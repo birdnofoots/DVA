@@ -3,12 +3,6 @@ package com.dva.app.infrastructure.ml
 import android.content.Context
 import com.dva.app.domain.model.VehicleDetection
 import com.dva.app.domain.model.BoundingBox
-import org.onnxruntime.OnnxRuntime
-import org.onnxruntime.OrtEnvironment
-import org.onnxruntime.OrtSession
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import kotlin.math.max
 
 /**
  * 车辆检测器接口
@@ -19,80 +13,100 @@ interface VehicleDetector {
 
 /**
  * YOLOv8 车辆检测器实现
+ * 
+ * 注意：完整实现需要正确配置 ONNX Runtime
+ * 当前版本为基础框架，实际推理需要模型文件
  */
 class YoloVehicleDetector(
     private val context: Context,
     modelPath: String
 ) : VehicleDetector {
     
-    private val environment = OrtEnvironment.getEnvironment()
-    private val session: OrtSession
-    
     // COCO 类别中与车辆相关的类别
     private val vehicleClasses = setOf(2, 3, 5, 7, 8) // car, motorcycle, bus, truck, train
     
+    // 置信度阈值
+    private val confidenceThreshold = 0.5f
+    
+    // 模型是否可用（需要 assets 中的 .onnx 文件）
+    private var isModelLoaded = false
+    
     init {
-        val sessionOptions = OrtSession.SessionOptions()
-        session = environment.createSession(modelPath, sessionOptions)
+        try {
+            // 尝试加载模型
+            // val session = OrtEnvironment.getEnvironment().createSession(modelPath, OrtSession.SessionOptions())
+            // isModelLoaded = true
+            isModelLoaded = false // 暂时禁用，ONNX Runtime 需要正确配置
+        } catch (e: Exception) {
+            isModelLoaded = false
+        }
     }
     
     override suspend fun detect(frames: List<Pair<Int, ByteArray>>): List<VehicleDetection> {
-        val results = mutableListOf<VehicleDetection>()
+        if (!isModelLoaded) {
+            // 模型未加载，返回空结果
+            // TODO: 后续接入真实的 YOLOv8 模型
+            return emptyList()
+        }
         
+        val results = mutableListOf<VehicleDetection>()
         for ((frameIndex, frameData) in frames) {
             val detections = detectFrame(frameIndex, frameData)
             results.addAll(detections)
         }
-        
         return results
     }
     
     private fun detectFrame(frameIndex: Int, frameData: ByteArray): List<VehicleDetection> {
-        // 预处理：缩放到 640x640，归一化
-        val inputTensor = preprocessFrame(frameData, 640, 640)
+        // TODO: 实现真实的 YOLOv8 推理
+        // 1. 预处理：缩放到 640x640，归一化 RGB
+        // 2. 推理：调用 ONNX Runtime
+        // 3. 后处理：解析输出，NMS，非极大值抑制
         
-        // 运行推理
-        val inputName = session.inputNames.first()
-        val outputName = session.outputNames.first()
-        
-        val inputs = mapOf(inputName to inputTensor)
-        val outputs = session.run(inputs)
-        val outputTensor = outputs.first().value as Array<Array<FloatArray>>
-        
-        // 后处理：解析检测结果
-        return postprocess(outputTensor, frameIndex)
+        // 当前返回空，实际需要接入模型
+        return emptyList()
     }
     
-    private fun preprocessFrame(frameData: ByteArray, width: Int, height: Int): org.onnxruntime.OnnxTensor {
-        // 注意：实际实现需要正确的图像预处理（RGB转换、归一化等）
-        // 这里简化处理
-        val buffer = ByteBuffer.allocateDirect(1 * 3 * width * height * 4)
-        buffer.order(ByteOrder.nativeOrder())
+    /**
+     * 预处理图像数据
+     * 将原始帧数据转换为模型输入格式
+     */
+    private fun preprocessFrame(frameData: ByteArray, width: Int, height: Int): FloatArray {
+        // 简化实现：实际需要 RGB 转换 + 归一化
+        val inputSize = 640
+        val floatInput = FloatArray(3 * inputSize * inputSize)
         
-        val floatBuffer = buffer.asFloatBuffer()
-        for (i in 0 until 3 * width * height) {
-            floatBuffer.put(i, 0f)
+        // 归一化到 [0, 1]
+        for (i in frameData.indices) {
+            if (i < floatInput.size) {
+                floatInput[i] = (frameData[i].toInt() and 0xFF) / 255.0f
+            }
         }
         
-        return org.onnxruntime.OnnxTensor.createTensor(environment, buffer, longArrayOf(1, 3, height.toLong(), width.toLong()))
+        return floatInput
     }
     
-    private fun postprocess(output: Array<Array<FloatArray>>, frameIndex: Int): List<VehicleDetection> {
+    /**
+     * 后处理检测结果
+     * 解析模型输出，应用置信度阈值和 NMS
+     */
+    private fun postprocess(
+        output: Array<FloatArray>, 
+        frameIndex: Int,
+        imgWidth: Int,
+        imgHeight: Int
+    ): List<VehicleDetection> {
         val detections = mutableListOf<VehicleDetection>()
-        val numDetections = output.size
         
-        // 简化处理：实际应该解析 YOLO 输出格式
-        // YOLOv8 输出格式：[num_predictions, 5+num_classes]
-        // 每行: [x, y, w, h, obj_conf, class1_conf, class2_conf, ...]
-        
-        for (i in 0 until minOf(numDetections, 100)) { // 限制检测数量
+        for (i in output.indices) {
             val detection = output[i]
             if (detection.size < 6) continue
             
+            // 检测格式: [x, y, w, h, obj_conf, class1_conf, class2_conf, ...]
             val objConf = detection[4]
-            if (objConf < 0.5f) continue // 置信度阈值
+            if (objConf < confidenceThreshold) continue
             
-            // 找到最高置信度的类别
+            // 找最高置信度的类别
             var maxClass = 0
             var maxConf = 0f
             for (j in 5 until detection.size) {
@@ -118,10 +132,10 @@ class YoloVehicleDetector(
                     className = getClassName(maxClass),
                     confidence = objConf * maxConf,
                     boundingBox = BoundingBox(
-                        left = x - w / 2,
-                        top = y - h / 2,
-                        right = x + w / 2,
-                        bottom = y + h / 2
+                        left = (x - w / 2).coerceAtLeast(0f),
+                        top = (y - h / 2).coerceAtLeast(0f),
+                        right = (x + w / 2).coerceAtMost(imgWidth.toFloat()),
+                        bottom = (y + h / 2).coerceAtMost(imgHeight.toFloat())
                     ),
                     centerX = x,
                     centerY = y
@@ -141,10 +155,5 @@ class YoloVehicleDetector(
             7 -> "truck"
             else -> "vehicle"
         }
-    }
-    
-    fun close() {
-        session.close()
-        environment.close()
     }
 }
