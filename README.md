@@ -473,7 +473,7 @@ _最后更新: 2026-03-31（完全重构）_
 ## 📥 下载试用
 
 ### 最新版本
-- [DVA-v1.0.0-debug.apk](./releases/DVA-v1.0.0-debug.apk) - 测试版 APK
+- [DVA-v1.0.0-debug.apk](https://github.com/birdnofoots/DVA/releases/download/v1.0.0/DVA-v1.0.0-debug.apk) - 测试版 APK
 
 ### 安装说明
 1. 下载 APK 文件
