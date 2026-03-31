@@ -437,3 +437,33 @@ app/build/outputs/apk/debug/app-debug.apk
 
 APK 大小约 5-40MB（取决于是否包含 ML 模型）。
 
+
+---
+
+## ⚠️ 项目状态（2026-03-31 更新）
+
+### ✅ 已完成
+- [x] Clean Architecture 项目骨架
+- [x] Domain 层：Models、Repository 接口、UseCases
+- [x] Infrastructure 层：视频处理、ML 检测器接口、违章分析器
+- [x] Data 层：Room 数据库、存储管理
+- [x] Presentation 层：MVVM + Jetpack Compose UI（基础框架）
+- [x] DI 模块：Hilt 依赖注入配置
+- [x] YOLOv8n 车辆检测模型
+
+### 🚧 进行中
+- [ ] 车道线检测模型（LaneNet）
+- [ ] 车牌识别模型（LPRNet/PaddleOCR）
+- [ ] 完整的 UI 页面实现
+- [ ] 三阶段截图逻辑
+- [ ] 报告生成功能
+
+### 📋 待实现
+- [ ] 闯红灯检测
+- [ ] 不按规定车道行驶检测
+- [ ] 云端同步
+
+---
+
+_文档版本: v2.0_  
+_最后更新: 2026-03-31（完全重构）_
