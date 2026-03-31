@@ -137,4 +137,9 @@ object AppModule {
     fun provideGetProcessingProgressUseCase(videoRepository: VideoRepository): GetProcessingProgressUseCase {
         return GetProcessingProgressUseCase(videoRepository)
     }
+    
+    @Provides
+    fun provideGetVideoInfoUseCase(videoRepository: VideoRepository): GetVideoInfoUseCase {
+        return GetVideoInfoUseCase(videoRepository)
+    }
 }
