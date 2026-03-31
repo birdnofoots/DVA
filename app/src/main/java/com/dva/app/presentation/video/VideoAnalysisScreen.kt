@@ -84,7 +84,7 @@ fun VideoAnalysisScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     
                     LinearProgressIndicator(
-                        progress = { uiState.progress / 100f },
+                        progress = { uiState.progress.toFloat() / 100f },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     

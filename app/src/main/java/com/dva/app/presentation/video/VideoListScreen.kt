@@ -88,7 +88,7 @@ fun VideoListScreen(
             // 状态信息
             if (uiState.selectedDirectory != null) {
                 Text(
-                    text = "已选择: ${uiState.selectedDirectoryUri?.substringAfterLast("/") ?: uiState.selectedDirectory}",
+                    text = "已选择: ${uiState.selectedFolderUri?.substringAfterLast("/") ?: uiState.selectedDirectory}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp)

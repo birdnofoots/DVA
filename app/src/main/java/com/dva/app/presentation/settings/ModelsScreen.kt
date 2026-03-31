@@ -200,7 +200,7 @@ fun ModelCard(
             if (model.isDownloading) {
                 Spacer(modifier = Modifier.height(12.dp))
                 LinearProgressIndicator(
-                    progress = { model.downloadProgress / 100f },
+                    progress = { model.downloadProgress.toFloat() / 100f },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(modifier = Modifier.height(4.dp))

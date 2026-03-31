@@ -159,7 +159,6 @@ fun HomeScreen(
 }
 
 @Composable
-@Composable
 fun VideoItem(
     video: VideoFile,
     onAnalyze: () -> Unit = {}
