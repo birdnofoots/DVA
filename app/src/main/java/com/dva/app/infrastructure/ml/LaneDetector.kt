@@ -273,12 +273,12 @@ class SimpleLaneDetector : LaneDetector {
 class ColorBasedLaneDetector : LaneDetector {
     
     companion object {
-        // 黄色阈值
-        private const val YELLOW_LOWER = 0x99 to 0x99 to 0x00
-        private const val YELLOW_UPPER = 0xFF to 0xFF to 0x99
+        // 黄色阈值 (R, G, B)
+        private val YELLOW_LOWER = intArrayOf(100, 100, 0)
+        private val YELLOW_UPPER = intArrayOf(255, 255, 150)
         // 白色阈值
-        private const val WHITE_LOWER = 0xCC to 0xCC to 0xCC
-        private const val WHITE_UPPER = 0xFF to 0xFF to 0xFF
+        private val WHITE_LOWER = intArrayOf(200, 200, 200)
+        private val WHITE_UPPER = intArrayOf(255, 255, 255)
     }
     
     override suspend fun detect(frames: List<Pair<Int, ByteArray>>): List<LaneDetection> {
