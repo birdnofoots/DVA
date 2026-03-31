@@ -47,24 +47,179 @@ class VideoRepositoryImpl(
     
     /**
      * 使用 SAF URI 扫描视频文件
+     * 优先使用 DocumentFile，失败时回退到 MediaStore
      */
     override suspend fun scanUri(uri: Uri): List<VideoFile> = withContext(Dispatchers.IO) {
-        val videos = mutableListOf<VideoFile>()
+        // 方案1：尝试使用 DocumentFile
+        var videos = scanWithDocumentFile(uri)
         
-        // 使用 DocumentFile 遍历目录
-        val documentFile = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, uri)
+        // 方案2：如果 DocumentFile 返回空，尝试使用 MediaStore
+        // 这对百度网盘等虚拟文件系统更友好
+        if (videos.isEmpty()) {
+            videos = scanWithMediaStore(uri)
+        }
         
-        documentFile?.listFiles()?.forEach { file ->
-            if (file.isFile && isVideoFile(file.name ?: "")) {
-                // 获取视频信息
-                val videoInfo = getVideoInfoFromUri(file.uri)
-                if (videoInfo != null) {
-                    videos.add(videoInfo)
-                }
-            }
+        // 方案3：如果还是空，尝试使用 content resolver 直接查询
+        if (videos.isEmpty()) {
+            videos = scanWithContentResolver(uri)
         }
         
         videos
+    }
+    
+    /**
+     * 使用 DocumentFile 扫描（标准 SAF）
+     */
+    private suspend fun scanWithDocumentFile(uri: Uri): List<VideoFile> = withContext(Dispatchers.IO) {
+        val videos = mutableListOf<VideoFile>()
+        
+        try {
+            val documentFile = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, uri)
+            
+            documentFile?.listFiles()?.forEach { file ->
+                if (file.isFile && isVideoFile(file.name ?: "")) {
+                    val videoInfo = getVideoInfoFromUri(file.uri)
+                    if (videoInfo != null) {
+                        videos.add(videoInfo)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // DocumentFile 失败，返回空列表让调用方尝试其他方案
+        }
+        
+        videos
+    }
+    
+    /**
+     * 使用 MediaStore 扫描（对虚拟文件系统更友好）
+     */
+    private suspend fun scanWithMediaStore(treeUri: Uri): List<VideoFile> = withContext(Dispatchers.IO) {
+        val videos = mutableListOf<VideoFile>()
+        
+        try {
+            // 从 tree URI 提取 document ID
+            val docId = DocumentsContract.getTreeDocumentId(treeUri)
+            
+            // 使用 MediaStore 查询该目录下的视频
+            val projection = arrayOf(
+                android.provider.MediaStore.Video.Media._ID,
+                android.provider.MediaStore.Video.Media.DISPLAY_NAME,
+                android.provider.MediaStore.Video.Media.DURATION,
+                android.provider.MediaStore.Video.Media.SIZE,
+                android.provider.MediaStore.Video.Media.WIDTH,
+                android.provider.MediaStore.Video.Media.HEIGHT
+            )
+            
+            // 构建 selection 和 selectionArgs 来限定目录
+            val selection = "${android.provider.MediaStore.Video.Media.RELATIVE_PATH} LIKE ?"
+            val relativePath = getRelativePathFromDocId(docId)
+            val selectionArgs = arrayOf("$relativePath%")
+            
+            context.contentResolver.query(
+                android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                if (relativePath.isNotEmpty()) selection else null,
+                if (relativePath.isNotEmpty()) selectionArgs else null,
+                "${android.provider.MediaStore.Video.Media.DATE_MODIFIED} DESC"
+            )?.use { cursor ->
+                val idColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media._ID)
+                val nameColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.DISPLAY_NAME)
+                val durationColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.DURATION)
+                val sizeColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.SIZE)
+                val widthColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.WIDTH)
+                val heightColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.HEIGHT)
+                
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idColumn)
+                    val name = cursor.getString(nameColumn) ?: "unknown"
+                    val duration = cursor.getLong(durationColumn)
+                    val size = cursor.getLong(sizeColumn)
+                    val width = cursor.getInt(widthColumn)
+                    val height = cursor.getInt(heightColumn)
+                    
+                    val contentUri = android.content.ContentUris.withAppendedId(
+                        android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id
+                    )
+                    
+                    videos.add(
+                        VideoFile(
+                            path = contentUri.toString(),
+                            name = name,
+                            durationMs = duration,
+                            width = width,
+                            height = height,
+                            fps = 25f,
+                            frameCount = ((duration / 1000.0) * 25).toInt(),
+                            fileSize = size
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            // MediaStore 也失败，返回空
+        }
+        
+        videos
+    }
+    
+    /**
+     * 使用 ContentResolver 直接查询
+     */
+    private suspend fun scanWithContentResolver(uri: Uri): List<VideoFile> = withContext(Dispatchers.IO) {
+        val videos = mutableListOf<VideoFile>()
+        
+        try {
+            val childrenUri = android.provider.DocumentsContract.buildDocumentChildrenUri(
+                uri.authority ?: return@withContext videos,
+                android.provider.DocumentsContract.getTreeDocumentId(uri)
+            )
+            
+            context.contentResolver.query(
+                childrenUri,
+                arrayOf(
+                    android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    android.provider.DocumentsContract.Document.COLUMN_SIZE,
+                    android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE
+                ),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                val nameIdx = cursor.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                val sizeIdx = cursor.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_SIZE)
+                val mimeIdx = cursor.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE)
+                
+                while (cursor.moveToNext()) {
+                    val name = if (nameIdx >= 0) cursor.getString(nameIdx) else null
+                    val size = if (sizeIdx >= 0) cursor.getLong(sizeIdx) else 0L
+                    val mime = if (mimeIdx >= 0) cursor.getString(mimeIdx) else null
+                    
+                    if (name != null && isVideoFile(name)) {
+                        val videoInfo = getVideoInfoFromUri(uri)
+                        if (videoInfo != null) {
+                            videos.add(videoInfo)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // ContentResolver 也失败
+        }
+        
+        videos
+    }
+    
+    /**
+     * 从 DocId 提取相对路径
+     */
+    private fun getRelativePathFromDocId(docId: String): String {
+        // docId 格式通常是 "primary:DCIM/Camera" 或 "com.baidu.netdisk:/DCIM/Camera"
+        return if (docId.contains(":")) {
+            docId.substringAfter(":")
+        } else {
+            docId
+        }
     }
     
     /**
