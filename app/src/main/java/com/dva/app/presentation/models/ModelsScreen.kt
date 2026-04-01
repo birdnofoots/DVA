@@ -201,12 +201,6 @@ private fun ModelItem(
                             strokeWidth = 2.dp
                         )
                     }
-                    is DownloadState.Verifying -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp
-                        )
-                    }
                     is DownloadState.Completed -> {
                         Icon(
                             Icons.Default.CheckCircle,
@@ -214,7 +208,7 @@ private fun ModelItem(
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
-                    is DownloadState.Failed -> {
+                    is DownloadState.Error -> {
                         Icon(
                             Icons.Default.Error,
                             contentDescription = "失败",
@@ -222,7 +216,7 @@ private fun ModelItem(
                         )
                     }
                     else -> {
-                        // Handle any unexpected state
+                        // Handle other states: Idle, Downloading
                         Icon(
                             Icons.Default.Help,
                             contentDescription = "未知状态",
@@ -267,13 +261,6 @@ private fun ModelItem(
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
-                        is DownloadState.Verifying -> {
-                            Text(
-                                text = "验证中...",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                         is DownloadState.Completed -> {
                             TextButton(onClick = onDelete) {
                                 Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -281,7 +268,7 @@ private fun ModelItem(
                                 Text("删除")
                             }
                         }
-                        is DownloadState.Failed -> {
+                        is DownloadState.Error -> {
                             Button(onClick = onDownload) {
                                 Text("重试")
                             }
@@ -291,17 +278,28 @@ private fun ModelItem(
                             }
                         }
                         else -> {
-                            // Handle unexpected state
+                            // Handle Idle state
+                            if (model.isDownloaded) {
+                                TextButton(onClick = onDelete) {
+                                    Text("删除")
+                                }
+                            } else {
+                                Button(onClick = onDownload) {
+                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("下载")
+                                }
+                            }
                         }
                     }
                 }
             }
             
             // 错误信息
-            if (downloadState is DownloadState.Failed) {
+            if (downloadState is DownloadState.Error) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = downloadState.error,
+                    text = downloadState.message,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
