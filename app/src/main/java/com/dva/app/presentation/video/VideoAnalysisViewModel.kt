@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dva.app.domain.model.ViolationRecord
 import com.dva.app.domain.model.VideoFile
+import com.dva.app.domain.repository.VideoRepository
 import com.dva.app.domain.usecase.AnalyzeVideoUseCase
 import com.dva.app.domain.usecase.GetVideoInfoUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -39,7 +40,8 @@ data class VideoAnalysisUiState(
 @HiltViewModel
 class VideoAnalysisViewModel @Inject constructor(
     private val analyzeVideoUseCase: AnalyzeVideoUseCase,
-    private val getVideoInfoUseCase: GetVideoInfoUseCase
+    private val getVideoInfoUseCase: GetVideoInfoUseCase,
+    private val videoRepository: VideoRepository
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(VideoAnalysisUiState())
@@ -66,14 +68,39 @@ class VideoAnalysisViewModel @Inject constructor(
             )
             
             try {
+                // 如果是 SAF URI，先复制到本地缓存
+                var localVideoPath = videoPath
+                if (videoPath.startsWith("content://")) {
+                    addLog("检测到 SAF URI，正在复制到本地缓存...")
+                    localVideoPath = videoRepository.copyToLocalCache(videoPath) ?: ""
+                    if (localVideoPath.isBlank()) {
+                        _uiState.value = _uiState.value.copy(
+                            isAnalyzing = false,
+                            errorMessage = "无法复制视频到本地缓存，请确保存储空间充足后重试"
+                        )
+                        return@launch
+                    }
+                    addLog("已复制到: $localVideoPath")
+                }
+                
                 // 获取视频信息
                 addLog("正在获取视频信息...")
-                val videoInfo = getVideoInfoUseCase(videoPath)
+                val videoInfo = try {
+                    getVideoInfoUseCase(localVideoPath)
+                } catch (e: Exception) {
+                    addLog("获取视频信息异常: ${e::class.simpleName}: ${e.message}")
+                    null
+                }
                 
                 if (videoInfo == null) {
+                    val errorMsg = if (videoPath.startsWith("content://")) {
+                        "无法访问视频文件，请重新从文件夹选择该视频（SAF权限可能已失效）"
+                    } else {
+                        "无法读取视频信息，请检查视频文件是否有效"
+                    }
                     _uiState.value = _uiState.value.copy(
                         isAnalyzing = false,
-                        errorMessage = "无法读取视频信息，请检查视频文件是否有效"
+                        errorMessage = errorMsg
                     )
                     return@launch
                 }
@@ -91,7 +118,7 @@ class VideoAnalysisViewModel @Inject constructor(
                 addLog("开始帧提取和模型推理...")
                 val result = withTimeoutOrNull(5 * 60 * 1000L) {
                     analyzeVideoUseCase(
-                        videoPath = videoPath,
+                        videoPath = localVideoPath,
                         onProgress = { progress ->
                             val safeProgress = progress.coerceIn(0, 100)
                             val currentFrame = (safeProgress * totalFrames) / 100

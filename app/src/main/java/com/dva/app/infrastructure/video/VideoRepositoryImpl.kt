@@ -298,7 +298,14 @@ class VideoRepositoryImpl(
     override suspend fun getVideoInfo(videoPath: String): VideoFile? = withContext(Dispatchers.IO) {
         try {
             val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(videoPath)
+            
+            // 判断是文件路径还是 content:// URI
+            if (videoPath.startsWith("content://")) {
+                val uri = Uri.parse(videoPath)
+                retriever.setDataSource(context, uri)
+            } else {
+                retriever.setDataSource(videoPath)
+            }
             
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0
             val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
@@ -307,20 +314,55 @@ class VideoRepositoryImpl(
             
             retriever.release()
             
-            val file = File(videoPath)
-            val fps = estimateFps(videoPath)
+            // 根据路径类型获取文件名和大小
+            val (name, fileSize, fps) = if (videoPath.startsWith("content://")) {
+                val uri = Uri.parse(videoPath)
+                Triple(
+                    getFileNameFromUri(uri) ?: "unknown",
+                    getFileSizeFromUri(uri),
+                    25f  // SAF 无法获取帧率，使用默认值
+                )
+            } else {
+                val file = File(videoPath)
+                Triple(file.name, file.length(), estimateFps(videoPath))
+            }
+            
             val frameCount = ((durationMs / 1000.0) * fps).toInt()
             
             VideoFile(
                 path = videoPath,
-                name = file.name,
+                name = name,
                 durationMs = durationMs,
                 width = if (rotation == 90 || rotation == 270) height else width,
                 height = if (rotation == 90 || rotation == 270) width else height,
                 fps = fps,
                 frameCount = frameCount,
-                fileSize = file.length()
+                fileSize = fileSize
             )
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    override suspend fun copyToLocalCache(videoUri: String): String? = withContext(Dispatchers.IO) {
+        try {
+            if (!videoUri.startsWith("content://")) {
+                return@withContext videoUri // 已经是本地文件，不需要复制
+            }
+            
+            val uri = Uri.parse(videoUri)
+            val fileName = getFileNameFromUri(uri) ?: "video_${System.currentTimeMillis()}.mp4"
+            val cacheDir = File(context.cacheDir, "video_cache")
+            cacheDir.mkdirs()
+            val outputFile = File(cacheDir, fileName)
+            
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(outputFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            
+            outputFile.absolutePath
         } catch (e: Exception) {
             null
         }
@@ -329,7 +371,14 @@ class VideoRepositoryImpl(
     override suspend fun extractFrame(videoPath: String, frameIndex: Int): ByteArray? = withContext(Dispatchers.IO) {
         try {
             val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(videoPath)
+            
+            // 判断是文件路径还是 content:// URI
+            if (videoPath.startsWith("content://")) {
+                val uri = Uri.parse(videoPath)
+                retriever.setDataSource(context, uri)
+            } else {
+                retriever.setDataSource(videoPath)
+            }
             
             val timeUs = (frameIndex * 1000000L / 25) // 假设25fps
             val frame = retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
@@ -395,8 +444,14 @@ class VideoRepositoryImpl(
     
     /**
      * 估算视频帧率
+     * 注意：content:// URI 可能无法正确获取帧率，默认返回 25fps
      */
     private fun estimateFps(videoPath: String): Float {
+        // SAF URI 无法使用 MediaExtractor 获取帧率，直接返回默认值
+        if (videoPath.startsWith("content://")) {
+            return 25f
+        }
+        
         return try {
             val extractor = MediaExtractor()
             extractor.setDataSource(videoPath)

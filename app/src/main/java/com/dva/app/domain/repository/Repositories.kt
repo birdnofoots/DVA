@@ -24,6 +24,11 @@ interface VideoRepository {
     suspend fun getVideoInfo(videoPath: String): VideoFile?
     
     /**
+     * 将 SAF URI 的视频复制到本地缓存（用于解决权限问题）
+     */
+    suspend fun copyToLocalCache(videoUri: String): String?
+    
+    /**
      * 提取指定帧
      */
     suspend fun extractFrame(videoPath: String, frameIndex: Int): ByteArray?
