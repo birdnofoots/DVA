@@ -68,19 +68,19 @@ class VideoAnalysisViewModel @Inject constructor(
             )
             
             try {
-                // 如果是 SAF URI，先复制到本地缓存
+                // 如果是 SAF URI，尝试直接分析或复制到本地缓存
                 var localVideoPath = videoPath
                 if (videoPath.startsWith("content://")) {
-                    addLog("检测到 SAF URI，正在复制到本地缓存...")
-                    localVideoPath = videoRepository.copyToLocalCache(videoPath) ?: ""
-                    if (localVideoPath.isBlank()) {
-                        _uiState.value = _uiState.value.copy(
-                            isAnalyzing = false,
-                            errorMessage = "无法复制视频到本地缓存，请确保存储空间充足后重试"
-                        )
-                        return@launch
+                    addLog("检测到 SAF URI，尝试复制到本地缓存...")
+                    val cachePath = videoRepository.copyToLocalCache(videoPath)
+                    if (!cachePath.isNullOrBlank()) {
+                        localVideoPath = cachePath
+                        addLog("已复制到本地缓存: $localVideoPath")
+                    } else {
+                        // 复制失败，尝试直接用 URI 分析
+                        addLog("复制失败，尝试直接分析...")
+                        localVideoPath = videoPath
                     }
-                    addLog("已复制到: $localVideoPath")
                 }
                 
                 // 获取视频信息
@@ -94,7 +94,8 @@ class VideoAnalysisViewModel @Inject constructor(
                 
                 if (videoInfo == null) {
                     val errorMsg = if (videoPath.startsWith("content://")) {
-                        "无法访问视频文件，请重新从文件夹选择该视频（SAF权限可能已失效）"
+                        addLog("提示: SAF URI 访问失败，请尝试将视频保存到手机本地文件夹后再分析")
+                        "无法访问视频文件（SAF权限受限），请将视频保存到「文件」/「Downloads」文件夹后重试"
                     } else {
                         "无法读取视频信息，请检查视频文件是否有效"
                     }
