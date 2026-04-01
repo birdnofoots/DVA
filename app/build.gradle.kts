@@ -14,8 +14,8 @@ android {
         applicationId = "com.dva.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.4.0"
+        versionCode = 5
+        versionName = "1.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -102,6 +102,9 @@ dependencies {
     // ONNX Runtime Mobile
     val onnxVersion = "1.16.2"
     implementation("com.microsoft.onnxruntime:onnxruntime-android:$onnxVersion")
+    
+    // FFmpegKit for fast video frame extraction
+    implementation("com.arthenica:ffmpeg-kit-full:6.0-2")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

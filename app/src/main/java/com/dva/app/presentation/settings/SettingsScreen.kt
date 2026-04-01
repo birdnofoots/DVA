@@ -168,7 +168,7 @@ fun SettingsScreen(
                 SettingsItem(
                     icon = Icons.Default.Info,
                     title = "关于 DVA",
-                    subtitle = "版本 1.4.0",
+                    subtitle = "版本 1.5.0",
                     onClick = { }
                 )
             }

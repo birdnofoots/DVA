@@ -1,9 +1,12 @@
 package com.dva.app.presentation.home
 
+import android.app.Application
 import android.net.Uri
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.dva.app.data.local.storage.ModelDownloadManager
 import com.dva.app.domain.model.VideoFile
+import com.dva.app.domain.repository.VideoRepository
 import com.dva.app.domain.usecase.ScanVideosUseCase
 import com.dva.app.presentation.GlobalVideoState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,7 +24,8 @@ data class HomeUiState(
     val selectedDirectory: String? = null,
     val selectedFolderUri: String? = null,
     val videos: List<VideoFile> = emptyList(),
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val modelStatuses: Map<String, Boolean> = emptyMap()
 )
 
 /**
@@ -29,11 +33,28 @@ data class HomeUiState(
  */
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val scanVideosUseCase: ScanVideosUseCase
-) : ViewModel() {
+    private val scanVideosUseCase: ScanVideosUseCase,
+    private val application: Application
+) : AndroidViewModel(application) {
     
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+    
+    private val modelDownloadManager = ModelDownloadManager(application)
+    
+    init {
+        refreshModelStatuses()
+    }
+    
+    /**
+     * 刷新模型下载状态
+     */
+    private fun refreshModelStatuses() {
+        modelDownloadManager.refreshModelStatuses()
+        _uiState.value = _uiState.value.copy(
+            modelStatuses = modelDownloadManager.modelStatuses.value
+        )
+    }
     
     /**
      * 保存选择的文件夹 URI
@@ -76,6 +97,27 @@ class HomeViewModel @Inject constructor(
                     GlobalVideoState.updateError(error.message)
                     GlobalVideoState.updateLoading(false)
                 }
+        }
+    }
+    
+    /**
+     * 复制视频到本地缓存（用于 MediaStore picker）
+     */
+    fun copyVideoToCache(
+        uri: Uri,
+        callback: (localPath: String?, error: String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val localPath = modelDownloadManager.copyVideoToLocalCache(uri.toString())
+                if (localPath != null) {
+                    callback(localPath, null)
+                } else {
+                    callback(null, "无法复制视频到本地缓存")
+                }
+            } catch (e: Exception) {
+                callback(null, "复制失败: ${e.message}")
+            }
         }
     }
     
