@@ -31,13 +31,61 @@ fun HomeScreen(
     onVideoSelected: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val sharedPrefs = context.getSharedPreferences("dva_prefs", android.content.Context.MODE_PRIVATE)
     
     // 使用全局状态
     val selectedUri = GlobalVideoState.selectedFolderUri
     val videos = GlobalVideoState.videosList
     val isLoading = GlobalVideoState.isLoading
     
-    // 文件选择器 - 使用 SAF 选择文件夹
+    // 首次启动引导状态
+    var showFirstLaunchDialog by remember { mutableStateOf(false) }
+    
+    // 检查是否首次启动
+    LaunchedEffect(Unit) {
+        val hasSelectedWorkDir = sharedPrefs.getBoolean("has_selected_work_dir", false)
+        if (!hasSelectedWorkDir && selectedUri == null) {
+            showFirstLaunchDialog = true
+        }
+    }
+    
+    // 首次启动引导对话框
+    if (showFirstLaunchDialog) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("欢迎使用 DVA") },
+            text = {
+                Column {
+                    Text("为了更好地访问您的视频文件，请选择一个工作目录。")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "推荐选择「Downloads/DVA」文件夹，这样您可以方便地管理要分析的视频。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { 
+                        showFirstLaunchDialog = false
+                        folderPicker.launch(null)
+                    }
+                ) {
+                    Text("选择工作目录")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showFirstLaunchDialog = false }
+                ) {
+                    Text("稍后")
+                }
+            }
+        )
+    }
+    
+    // 选择文件夹后记住
     val folderPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
@@ -57,6 +105,9 @@ fun HomeScreen(
                     // 权限获取失败
                 }
             }
+            
+            // 记住选择
+            sharedPrefs.edit().putBoolean("has_selected_work_dir", true).apply()
             
             // 保存到全局状态
             GlobalVideoState.setSelectedFolderUri(selectedUri)
