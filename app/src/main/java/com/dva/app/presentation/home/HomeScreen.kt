@@ -49,6 +49,39 @@ fun HomeScreen(
         }
     }
     
+    // 文件选择器 - 使用 SAF 选择文件夹
+    val folderPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        uri?.let { selectedUri ->
+            // 授予持久化权限
+            val takeFlags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or 
+                           android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            try {
+                context.contentResolver.takePersistableUriPermission(selectedUri, takeFlags)
+            } catch (e: SecurityException) {
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        selectedUri, 
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (e2: SecurityException) {
+                    // 权限获取失败
+                }
+            }
+            
+            // 记住选择
+            sharedPrefs.edit().putBoolean("has_selected_work_dir", true).apply()
+            
+            // 保存到全局状态
+            GlobalVideoState.setSelectedFolderUri(selectedUri)
+            GlobalVideoState.updateLoading(true)
+            
+            // 触发扫描
+            viewModel.scanVideosFromUri(selectedUri)
+        }
+    }
+    
     // 首次启动引导对话框
     if (showFirstLaunchDialog) {
         AlertDialog(
@@ -83,39 +116,6 @@ fun HomeScreen(
                 }
             }
         )
-    }
-    
-    // 选择文件夹后记住
-    val folderPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { uri: Uri? ->
-        uri?.let { selectedUri ->
-            // 授予持久化权限
-            val takeFlags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or 
-                           android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            try {
-                context.contentResolver.takePersistableUriPermission(selectedUri, takeFlags)
-            } catch (e: SecurityException) {
-                try {
-                    context.contentResolver.takePersistableUriPermission(
-                        selectedUri, 
-                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                } catch (e2: SecurityException) {
-                    // 权限获取失败
-                }
-            }
-            
-            // 记住选择
-            sharedPrefs.edit().putBoolean("has_selected_work_dir", true).apply()
-            
-            // 保存到全局状态
-            GlobalVideoState.setSelectedFolderUri(selectedUri)
-            GlobalVideoState.updateLoading(true)
-            
-            // 触发扫描 - 使用 HomeViewModel
-            viewModel.scanVideosFromUri(selectedUri)
-        }
     }
     
     Column(
