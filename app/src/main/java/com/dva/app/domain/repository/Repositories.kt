@@ -29,6 +29,16 @@ interface VideoRepository {
     suspend fun copyToLocalCache(videoUri: String): String?
     
     /**
+     * 获取缓存目录大小
+     */
+    suspend fun getCacheSize(): Long
+    
+    /**
+     * 手动清理缓存
+     */
+    suspend fun clearCache()
+    
+    /**
      * 提取指定帧
      */
     suspend fun extractFrame(videoPath: String, frameIndex: Int): ByteArray?

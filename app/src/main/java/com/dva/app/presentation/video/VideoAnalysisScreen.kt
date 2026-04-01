@@ -25,7 +25,8 @@ fun VideoAnalysisScreen(
     videoPath: String,
     videoName: String,
     viewModel: VideoAnalysisViewModel = hiltViewModel(),
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    onViewReport: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     
@@ -299,14 +300,14 @@ fun VideoAnalysisScreen(
             // 完成按钮
             if (uiState.isComplete) {
                 Button(
-                    onClick = { /* 生成报告 */ },
+                    onClick = onViewReport,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp)
                 ) {
                     Icon(Icons.Default.Description, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("生成报告")
+                    Text("查看报告")
                 }
             }
         }

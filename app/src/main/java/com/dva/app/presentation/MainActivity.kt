@@ -220,7 +220,11 @@ fun MainScreen(
                 VideoAnalysisScreen(
                     videoPath = videoPath,
                     videoName = videoName,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onViewReport = { 
+                        navController.popBackStack()
+                        navController.navigate(Screen.Report.route)
+                    }
                 )
             }
         }

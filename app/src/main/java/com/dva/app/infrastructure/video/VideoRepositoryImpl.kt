@@ -368,6 +368,34 @@ class VideoRepositoryImpl(
         }
     }
     
+    override suspend fun getCacheSize(): Long = withContext(Dispatchers.IO) {
+        try {
+            val cacheDir = File(context.cacheDir, "video_cache")
+            if (!cacheDir.exists()) return@withContext 0L
+            
+            var size = 0L
+            cacheDir.listFiles()?.forEach { file ->
+                size += file.length()
+            }
+            size
+        } catch (e: Exception) {
+            0L
+        }
+    }
+    
+    override suspend fun clearCache() = withContext(Dispatchers.IO) {
+        try {
+            val cacheDir = File(context.cacheDir, "video_cache")
+            if (cacheDir.exists()) {
+                cacheDir.listFiles()?.forEach { file ->
+                    file.delete()
+                }
+            }
+        } catch (e: Exception) {
+            // 忽略清理失败
+        }
+    }
+    
     override suspend fun extractFrame(videoPath: String, frameIndex: Int): ByteArray? = withContext(Dispatchers.IO) {
         try {
             val retriever = MediaMetadataRetriever()

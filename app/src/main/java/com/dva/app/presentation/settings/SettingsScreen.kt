@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 
 /**
  * 设置页面
@@ -23,9 +24,12 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    onNavigateToModels: () -> Unit = {}
+    onNavigateToModels: () -> Unit = {},
+    viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsState()
+    var showClearCacheDialog by remember { mutableStateOf(false) }
     
     // 截图保存路径选择器
     val folderPicker = rememberLauncherForActivityResult(
@@ -49,6 +53,30 @@ fun SettingsScreen(
             }
             // TODO: 保存选择的 URI 到 DataStore
         }
+    }
+    
+    // 清理缓存确认对话框
+    if (showClearCacheDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearCacheDialog = false },
+            title = { Text("清理缓存") },
+            text = { Text("确定要清理所有缓存视频吗？这将删除所有临时保存的视频文件。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearCache()
+                        showClearCacheDialog = false
+                    }
+                ) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearCacheDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
     
     Scaffold(
@@ -85,6 +113,24 @@ fun SettingsScreen(
                     title = "截图保存路径",
                     subtitle = "选择保存截图的文件夹",
                     onClick = { folderPicker.launch(null) }
+                )
+            }
+            
+            // 清理缓存
+            item {
+                SettingsItem(
+                    icon = Icons.Default.DeleteSweep,
+                    title = "清理缓存",
+                    subtitle = if (uiState.cacheSize > 0) {
+                        "缓存大小: ${viewModel.formatCacheSize(uiState.cacheSize)}"
+                    } else {
+                        "无缓存视频"
+                    },
+                    onClick = { 
+                        if (uiState.cacheSize > 0) {
+                            showClearCacheDialog = true
+                        }
+                    }
                 )
             }
             
