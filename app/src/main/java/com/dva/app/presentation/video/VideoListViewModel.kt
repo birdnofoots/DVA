@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dva.app.domain.model.VideoFile
+import com.dva.app.domain.repository.VideoRepository
 import com.dva.app.domain.usecase.ScanVideosUseCase
 import com.dva.app.presentation.GlobalVideoState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,7 +31,8 @@ data class VideoListUiState(
  */
 @HiltViewModel
 class VideoListViewModel @Inject constructor(
-    private val scanVideosUseCase: ScanVideosUseCase
+    private val scanVideosUseCase: ScanVideosUseCase,
+    private val videoRepository: VideoRepository
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(VideoListUiState())
@@ -118,5 +120,23 @@ class VideoListViewModel @Inject constructor(
      */
     fun clearSelection() {
         _uiState.value = _uiState.value.copy(selectedVideo = null)
+    }
+    
+    /**
+     * 复制视频到本地缓存
+     */
+    fun copyVideoToCache(uri: Uri, callback: (localPath: String?, error: String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val path = videoRepository.copyToLocalCache(uri.toString())
+                if (path != null) {
+                    callback(path, null)
+                } else {
+                    callback(null, "无法复制视频到本地缓存")
+                }
+            } catch (e: Exception) {
+                callback(null, "复制失败: ${e.message}")
+            }
+        }
     }
 }

@@ -66,32 +66,52 @@ fun VideoListScreen(
         }
     }
     
-    // 直接选择视频文件（更可靠的方式）
+    // 直接选择视频文件（复制到本地缓存的方式）
     val videoPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let { selectedUri ->
-            // 授予持久化读取权限
+            // 先尝试获取持久化权限
             val takeFlags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
             try {
                 context.contentResolver.takePersistableUriPermission(selectedUri, takeFlags)
             } catch (e: SecurityException) {
-                // 权限获取失败，继续使用（某些provider不支持persistable权限）
+                // 某些provider不支持persistable权限，继续使用
             }
             
-            // 直接使用这个文件
-            val videoFile = com.dva.app.domain.model.VideoFile(
-                path = selectedUri.toString(),
-                name = selectedUri.lastPathSegment ?: "video",
-                durationMs = 0,
-                width = 0,
-                height = 0,
-                fps = 0f,
-                frameCount = 0,
-                fileSize = 0
-            )
-            GlobalVideoState.updateVideos(listOf(videoFile))
-            GlobalVideoState.updateLoading(false)
+            // 复制到app私有目录（确保可以持续访问）
+            GlobalVideoState.updateLoading(true)
+            viewModel.copyVideoToCache(selectedUri) { localPath, error ->
+                GlobalVideoState.updateLoading(false)
+                if (localPath != null) {
+                    // 复制成功，使用本地路径
+                    val videoFile = com.dva.app.domain.model.VideoFile(
+                        path = localPath,
+                        name = selectedUri.lastPathSegment ?: "video",
+                        durationMs = 0,
+                        width = 0,
+                        height = 0,
+                        fps = 0f,
+                        frameCount = 0,
+                        fileSize = 0
+                    )
+                    GlobalVideoState.updateVideos(listOf(videoFile))
+                } else {
+                    // 复制失败，尝试直接使用URI
+                    val videoFile = com.dva.app.domain.model.VideoFile(
+                        path = selectedUri.toString(),
+                        name = selectedUri.lastPathSegment ?: "video",
+                        durationMs = 0,
+                        width = 0,
+                        height = 0,
+                        fps = 0f,
+                        frameCount = 0,
+                        fileSize = 0
+                    )
+                    GlobalVideoState.updateVideos(listOf(videoFile))
+                    GlobalVideoState.updateError(error ?: "无法访问视频文件")
+                }
+            }
         }
     }
     
