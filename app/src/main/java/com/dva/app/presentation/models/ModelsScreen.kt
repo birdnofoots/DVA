@@ -221,6 +221,14 @@ private fun ModelItem(
                             tint = MaterialTheme.colorScheme.error
                         )
                     }
+                    else -> {
+                        // Handle any unexpected state
+                        Icon(
+                            Icons.Default.Help,
+                            contentDescription = "未知状态",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
             
@@ -281,6 +289,9 @@ private fun ModelItem(
                             TextButton(onClick = onDelete) {
                                 Text("删除")
                             }
+                        }
+                        else -> {
+                            // Handle unexpected state
                         }
                     }
                 }
