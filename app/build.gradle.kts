@@ -103,8 +103,8 @@ dependencies {
     val onnxVersion = "1.16.2"
     implementation("com.microsoft.onnxruntime:onnxruntime-android:$onnxVersion")
     
-    // FFmpegKit for fast video frame extraction
-    implementation("com.arthenica:ffmpeg-kit-full:6.0-2")
+    // FFmpegKit for fast video frame extraction (temporarily disabled for build)
+    // implementation("com.arthenica:ffmpeg-kit-full:6.0-2")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
