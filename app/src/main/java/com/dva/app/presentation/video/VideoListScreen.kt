@@ -39,7 +39,7 @@ fun VideoListScreen(
     val isLoading = GlobalVideoState.isLoading
     val errorMessage = GlobalVideoState.errorMessage
     
-    // 文件选择器
+    // 文件夹选择器
     val folderPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
@@ -66,6 +66,35 @@ fun VideoListScreen(
         }
     }
     
+    // 直接选择视频文件（更可靠的方式）
+    val videoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let { selectedUri ->
+            // 授予持久化读取权限
+            val takeFlags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+            try {
+                context.contentResolver.takePersistableUriPermission(selectedUri, takeFlags)
+            } catch (e: SecurityException) {
+                // 权限获取失败，继续使用（某些provider不支持persistable权限）
+            }
+            
+            // 直接使用这个文件
+            val videoFile = com.dva.app.domain.model.VideoFile(
+                path = selectedUri.toString(),
+                name = selectedUri.lastPathSegment ?: "video",
+                durationMs = 0,
+                width = 0,
+                height = 0,
+                fps = 0f,
+                frameCount = 0,
+                fileSize = 0
+            )
+            GlobalVideoState.updateVideos(listOf(videoFile))
+            GlobalVideoState.updateLoading(false)
+        }
+    }
+    
     Scaffold(
         topBar = {
             TopAppBar(
@@ -82,16 +111,31 @@ fun VideoListScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // 选择文件夹按钮
+            // 选择视频按钮（推荐方式）
             Button(
+                onClick = { 
+                    // 过滤视频文件类型
+                    videoPicker.launch(arrayOf("video/*"))
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Icon(Icons.Default.VideoFile, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("直接选择视频文件（推荐）")
+            }
+            
+            // 选择文件夹按钮（备用方式）
+            OutlinedButton(
                 onClick = { folderPicker.launch(null) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
             ) {
                 Icon(Icons.Default.Folder, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("选择文件夹")
+                Text("或选择文件夹")
             }
             
             // 状态信息
