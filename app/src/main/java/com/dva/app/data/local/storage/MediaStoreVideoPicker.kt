@@ -81,15 +81,14 @@ class MediaStoreVideoPicker(private val context: Context) {
                     if (extension in listOf("mp4", "mov", "avi", "mkv", "3gp", "webm")) {
                         videos.add(
                             VideoFile(
-                                path = contentUri.toString(),  // 使用 content:// URI
+                                path = contentUri.toString(),
                                 name = name,
                                 durationMs = duration,
                                 width = width,
                                 height = height,
-                                fps = 25f,  // MediaStore 不提供帧率，使用默认值
+                                fps = 25f,
                                 frameCount = ((duration / 1000.0) * 25).toInt(),
-                                fileSize = size,
-                                contentUri = contentUri  // 额外保存原始 URI
+                                fileSize = size
                             )
                         )
                     }
@@ -112,7 +111,6 @@ class MediaStoreVideoPicker(private val context: Context) {
             return@withContext allVideos
         }
         
-        // 筛选指定文件夹下的视频
         allVideos.filter { video ->
             video.path?.startsWith(folderPath) == true
         }
@@ -124,7 +122,6 @@ class MediaStoreVideoPicker(private val context: Context) {
     suspend fun queryDvaFolderVideos(): List<VideoFile> = withContext(Dispatchers.IO) {
         val allVideos = queryAllVideos()
         
-        // 筛选 Downloads/DVA 或包含 "DVA" 的路径
         allVideos.filter { video ->
             val path = video.path ?: ""
             path.contains("Download", ignoreCase = true) && 
@@ -149,18 +146,3 @@ class MediaStoreVideoPicker(private val context: Context) {
         }
     }
 }
-
-/**
- * 扩展 VideoFile，添加 contentUri 字段
- */
-data class VideoFile(
-    val path: String?,
-    val name: String,
-    val durationMs: Long,
-    val width: Int,
-    val height: Int,
-    val fps: Float,
-    val frameCount: Int,
-    val fileSize: Long,
-    val contentUri: Uri? = null
-)

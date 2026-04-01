@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -30,17 +31,6 @@ data class ModelInfo(
 )
 
 /**
- * 下载状态
- */
-sealed class DownloadState {
-    data object Idle : DownloadState()
-    data class Downloading(val progress: Int) : DownloadState()
-    data object Verifying : DownloadState()
-    data object Completed : DownloadState()
-    data class Failed(val error: String) : DownloadState()
-}
-
-/**
  * 模型下载管理器
  * 从 GitHub Releases 下载 ML 模型文件
  */
@@ -51,7 +41,6 @@ class ModelDownloadManager(private val context: Context) {
         
         // GitHub Releases URL
         private const val GITHUB_REPO = "birdnofoots/DVA"
-        private const val GITHUB_RELEASES_API = "https://api.github.com/repos/$GITHUB_REPO/releases"
         
         // 模型文件目录
         private const val MODELS_DIR = "models"
@@ -63,7 +52,7 @@ class ModelDownloadManager(private val context: Context) {
                 name = "YOLOv8n 车辆检测",
                 description = "用于检测视频中的车辆目标，轻量级模型",
                 fileName = "yolov8n-vehicle.onnx",
-                sizeBytes = 6_500_000, // ~6.5MB
+                sizeBytes = 6_500_000,
                 downloadUrl = "https://github.com/$GITHUB_REPO/releases/download/v1.5.0/yolov8n-vehicle.onnx",
                 sha256 = null
             ),
@@ -72,7 +61,7 @@ class ModelDownloadManager(private val context: Context) {
                 name = "车道线检测",
                 description = "基于边缘检测的车道线识别模型",
                 fileName = "lane-detection.onnx",
-                sizeBytes = 5_200_000, // ~5MB
+                sizeBytes = 5_200_000,
                 downloadUrl = "https://github.com/$GITHUB_REPO/releases/download/v1.5.0/lane-detection.onnx",
                 sha256 = null
             ),
@@ -81,7 +70,7 @@ class ModelDownloadManager(private val context: Context) {
                 name = "PaddleOCR 车牌识别",
                 description = "轻量级 OCR 模型，用于识别车牌号码",
                 fileName = "paddle-ocr-lite.onnx",
-                sizeBytes = 10_500_000, // ~10MB
+                sizeBytes = 10_500_000,
                 downloadUrl = "https://github.com/$GITHUB_REPO/releases/download/v1.5.0/paddle-ocr-lite.onnx",
                 sha256 = null
             )
@@ -146,7 +135,7 @@ class ModelDownloadManager(private val context: Context) {
      */
     suspend fun downloadModel(modelId: String) = withContext(Dispatchers.IO) {
         val model = AVAILABLE_MODELS.find { it.id == modelId } ?: run {
-            updateState(modelId, DownloadState.Failed("未知模型: $modelId"))
+            updateState(modelId, DownloadState.Error("未知模型: $modelId"))
             return@withContext
         }
         
@@ -160,7 +149,6 @@ class ModelDownloadManager(private val context: Context) {
             val fileSize = connection.contentLength
             val outputFile = File(modelsDir, model.fileName)
             
-            // 如果文件已存在，先删除
             if (outputFile.exists()) {
                 outputFile.delete()
             }
@@ -187,11 +175,10 @@ class ModelDownloadManager(private val context: Context) {
             
             // 验证 SHA256（如果有）
             if (model.sha256 != null) {
-                updateState(modelId, DownloadState.Verifying)
                 val fileSha256 = calculateSHA256(outputFile)
                 if (fileSha256 != model.sha256) {
                     outputFile.delete()
-                    updateState(modelId, DownloadState.Failed("SHA256 校验失败"))
+                    updateState(modelId, DownloadState.Error("SHA256 校验失败"))
                     return@withContext
                 }
             }
@@ -202,7 +189,7 @@ class ModelDownloadManager(private val context: Context) {
             
         } catch (e: Exception) {
             Log.e(TAG, "模型下载失败: ${model.name}", e)
-            updateState(modelId, DownloadState.Failed(e.message ?: "下载失败"))
+            updateState(modelId, DownloadState.Error(e.message ?: "下载失败"))
         }
     }
     
@@ -237,12 +224,11 @@ class ModelDownloadManager(private val context: Context) {
     
     /**
      * 复制视频到本地缓存目录
-     * 用于 MediaStore picker 选择视频后
      */
     suspend fun copyVideoToLocalCache(videoUri: String): String? = withContext(Dispatchers.IO) {
         try {
             if (!videoUri.startsWith("content://")) {
-                return@withContext videoUri // 已经是本地文件
+                return@withContext videoUri
             }
             
             val uri = Uri.parse(videoUri)
@@ -253,7 +239,7 @@ class ModelDownloadManager(private val context: Context) {
             // 清理旧文件
             cacheDir.listFiles()?.forEach { file ->
                 if (System.currentTimeMillis() - file.lastModified() > 24 * 60 * 60 * 1000) {
-                    file.delete() // 删除超过24小时的缓存
+                    file.delete()
                 }
             }
             
@@ -275,7 +261,7 @@ class ModelDownloadManager(private val context: Context) {
     private fun getFileNameFromUri(uri: Uri): String? {
         return try {
             context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (nameIndex >= 0 && cursor.moveToFirst()) {
                     cursor.getString(nameIndex)
                 } else null
