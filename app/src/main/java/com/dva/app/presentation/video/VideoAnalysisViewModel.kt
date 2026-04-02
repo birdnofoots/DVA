@@ -148,7 +148,7 @@ class VideoAnalysisViewModel @Inject constructor(
                 
                 result.onSuccess { violations ->
                     // 统计涉及车辆数（按 frameIndex 和类型去重，简单估算）
-                    val uniqueVehicles = violations.map { "${it.frameIndex}_${it.type}" }.distinct()
+                    val uniqueVehicles = violations.map { "${it.frameIndex}_${it.violationType}" }.distinct()
                     val vehicleCount = uniqueVehicles.size.coerceAtLeast(1)
                     
                     addLog("分析完成，共检测到 ${violations.size} 个违章，涉及 $vehicleCount 辆车")
