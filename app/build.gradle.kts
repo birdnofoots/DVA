@@ -14,8 +14,8 @@ android {
         applicationId = "com.dva.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 12
-        versionName = "1.6.7"
+        versionCode = 13
+        versionName = "1.6.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -100,7 +100,7 @@ dependencies {
     kapt("androidx.room:room-compiler:$roomVersion")
 
     // ONNX Runtime Mobile
-    val onnxVersion = "1.16.2"
+    val onnxVersion = "1.17.3"
     implementation("com.microsoft.onnxruntime:onnxruntime-android:$onnxVersion")
     
     // FFmpegKit for fast video frame extraction
