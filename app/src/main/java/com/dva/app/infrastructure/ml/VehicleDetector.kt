@@ -66,7 +66,7 @@ class YoloVehicleDetector(
         
         // 打印系统信息
         ModelLoadingDebug.log("Android SDK: ${android.os.Build.VERSION.SDK_INT}")
-        ModelLoadingDebug.log("ONNX Runtime version: ${try { OrtEnvironment.getRuntimeVersion() } catch (e: Exception) { "unknown: ${e.message}" }}")
+        ModelLoadingDebug.log("ONNX Runtime info: ai.onnxruntime")
         
         // 方法1: 从 assets 直接加载 ByteArray
         try {
