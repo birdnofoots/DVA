@@ -5,8 +5,8 @@ import android.content.res.AssetManager
 import android.util.Log
 import com.dva.app.domain.model.VehicleDetection
 import com.dva.app.domain.model.BoundingBox
-import com.microsoft.onnxruntime.OrtEnvironment
-import com.microsoft.onnxruntime.OrtSession
+import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtSession
 import java.io.File
 import java.io.FileOutputStream
 
