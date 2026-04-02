@@ -23,7 +23,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.dva.app.presentation.home.HomeScreen
+import com.dva.app.presentation.home.NewHomeScreen
 import com.dva.app.presentation.report.ReportScreen
 import com.dva.app.presentation.settings.ModelsScreen
 import com.dva.app.presentation.settings.SettingsScreen
@@ -178,7 +178,7 @@ fun MainScreen(
             modifier = Modifier.padding(paddingValues)
         ) {
             composable(Screen.Home.route) {
-                HomeScreen(
+                NewHomeScreen(
                     appViewModel = appViewModel,
                     onVideoSelected = { videoPath ->
                         navController.navigate(Screen.Analysis.createRoute(videoPath))

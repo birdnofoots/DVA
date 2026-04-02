@@ -3,44 +3,30 @@
  * 
  * 功能：
  * 1. 截图并发送到 AI 服务器分析
- * 2. 执行 AI 返回的指令（点击、滑动、输入等）
+ * 2. 执行 AI 返回的指令（点击、滑动等）
  * 3. 支持 YOLO 目标检测
  * 4. 支持 OCR 文字识别
- * 
- * 使用方式：
- * 1. 在 AIGame 中加载此脚本
- * 2. 配置 SERVER_URL 为你的 AI 服务器地址
- * 3. 运行脚本
  */
 
-// ============== 配置 ==============
 let CONFIG = {
-    // AI 服务器地址（修改为你的服务器 IP）
     SERVER_URL: "http://100.91.119.94:18791/dva-test",
-    
-    // 是否显示调试信息
     DEBUG: true,
-    
-    // 截图质量 (1-100)
-    SCREENSHOT_QUALITY: 80,
-    
-    // 操作完成后等待时间(ms)
+    SCREENSHOT_QUALITY: 50,
     WAIT_AFTER_ACTION: 1000,
 };
 
-// ============== 日志 ==============
-function log(...args) {
+// 停止标志
+let STOP_FLAG = false;
+
+function log() {
     if (CONFIG.DEBUG) {
-        console.log("[DVA-Agent]", ...args);
+        var args = Array.prototype.slice.call(arguments);
+        console.log("[DVA-Agent] " + args.join(" "));
     }
 }
 
-// ============== 截图 ==============
-/**
- * 截取当前屏幕
- */
 function takeScreenshot() {
-    let screenshot = $screen.capture();
+    let screenshot = $屏幕.获取截屏();
     if (!screenshot) {
         log("截图失败");
         return null;
@@ -49,13 +35,10 @@ function takeScreenshot() {
     return screenshot;
 }
 
-/**
- * 保存截图到指定路径
- */
 function saveScreenshot(screenshot, path) {
     if (!screenshot) return false;
     try {
-        $file.write(screenshot, path);
+        $img.save(screenshot, path);
         log("截图已保存:", path);
         return true;
     } catch (e) {
@@ -64,51 +47,67 @@ function saveScreenshot(screenshot, path) {
     }
 }
 
-// ============== 网络通信 ==============
-/**
- * 发送截图到服务器并获取指令
- */
-function sendScreenshotForAnalysis(screenshot, screenInfo) {
+function sendToServer(screenshot, screenInfo) {
     if (!screenshot) {
-        log("没有截图可发送");
+        log("没有截图");
         return null;
     }
     
     try {
-        // 将截图转为 base64
-        let base64 = $img.toBase64(screenshot, CONFIG.SCREENSHOT_QUALITY);
+        // 获取截图信息
+        let w = screenInfo.w || screenshot.width;
+        let h = screenInfo.h || screenshot.height;
         
-        // 构造请求数据
-        let data = {
-            screenshot: base64,
-            screen: screenInfo,
-            timestamp: Date.now(),
-            availableActions: ["click", "swipe", "longPress", "input", "pressBack", "pressHome", "yoloDetect", "ocr"]
-        };
+        // 保存截图
+        let path = "/sdcard/dva_test.png";
+        $img.save(screenshot, path);
         
-        // 发送请求
-        let response = $http.post(CONFIG.SERVER_URL + "/analyze", {
-            json: data,
-            timeout: 30000
-        });
+        // 获取 base64（用于服务器分析）
+        // 暂时跳过 base64，只发送尺寸信息
+        log("截图尺寸:", w, "x", h);
         
-        if (response && response.code === 200) {
-            let result = response.body;
-            log("服务器响应:", JSON.stringify(result));
-            return result;
+        // 通过 GET 请求发送数据（POST 有问题）
+        let url = CONFIG.SERVER_URL + "/analyze?w=" + w + "&h=" + h + "&continueLoop=true";
+        log("发送请求到:", url);
+        
+        let response = $http.get(url);
+        
+        // AIGame HTTP 响应是 Java 对象，json() 和 string() 是方法需要调用
+        log("收到响应, code:", response.code);
+        
+        // 调用 string() 方法获取原始字符串
+        let raw = null;
+        try {
+            raw = response.string();
+            log("原始响应:", raw);
+        } catch (e) {
+            log("string() 失败:", e);
+        }
+        
+        // 尝试解析 JSON
+        let body = null;
+        if (raw) {
+            try {
+                body = JSON.parse(raw);
+                log("解析成功:", JSON.stringify(body));
+            } catch (e) {
+                log("JSON解析失败:", e);
+                body = raw;
+            }
+        }
+        
+        if (response.code === 200 && body) {
+            return body;
         } else {
-            log("服务器响应错误:", response);
+            log("服务器响应错误:", response.code);
             return null;
         }
     } catch (e) {
-        log("发送截图失败:", e);
+        log("发送失败:", e);
         return null;
     }
 }
 
-/**
- * 执行操作
- */
 function executeAction(action) {
     if (!action) {
         log("没有可执行的操作");
@@ -119,43 +118,19 @@ function executeAction(action) {
     
     let success = false;
     
-    switch (action.type) {
-        case "click":
-            success = $hid.点击(action.params.x, action.params.y);
-            break;
-            
-        case "swipe":
-            success = $hid.增强滑动(
-                action.params.x1, action.params.y1,
-                action.params.x2, action.params.y2,
-                action.params.duration || 300,
-                action.params.swipeDuration || 1000
-            );
-            break;
-            
-        case "longPress":
-            success = $hid.长按(action.params.x, action.params.y, action.params.duration || 1500);
-            break;
-            
-        case "input":
-            success = $hid.输入(action.params.text);
-            break;
-            
-        case "pressBack":
-            success = $hid.返回();
-            break;
-            
-        case "pressHome":
-            success = $hid.主页();
-            break;
-            
-        case "pressRecent":
-            success = $hid.最近();
-            break;
-            
-        default:
-            log("未知操作类型:", action.type);
-            return false;
+    if (action.type === "click") {
+        success = $hid.点击(action.params.x, action.params.y);
+    } else if (action.type === "swipe") {
+        success = $hid.增强滑动(
+            action.params.x1, action.params.y1,
+            action.params.x2, action.params.y2,
+            action.params.duration || 300,
+            action.params.swipeDuration || 1000
+        );
+    } else if (action.type === "back") {
+        success = $hid.返回();
+    } else if (action.type === "home") {
+        success = $hid.主页();
     }
     
     if (success) {
@@ -164,150 +139,53 @@ function executeAction(action) {
         log("操作执行失败");
     }
     
-    // 等待操作完成
-    $thread.sleep(CONFIG.WAIT_AFTER_ACTION);
-    
     return success;
 }
 
-// ============== YOLO 检测 ==============
-/**
- * 使用 YOLO 检测图像中的目标
- */
-function detectWithYOLO(image, options) {
-    try {
-        let result = $yolo.detect(image, {
-            confidence: options.confidence || 0.5,
-            classes: options.classes || null  // null 表示检测所有类
-        });
-        
-        log("YOLO 检测结果:", JSON.stringify(result));
-        return result;
-    } catch (e) {
-        log("YOLO 检测失败:", e);
-        return null;
-    }
-}
-
-// ============== OCR ==============
-/**
- * 使用 OCR 识别图片中的文字
- */
-function recognizeText(image) {
-    try {
-        let result = $ocr.recognize(image);
-        log("OCR 结果:", result);
-        return result;
-    } catch (e) {
-        log("OCR 失败:", e);
-        return null;
-    }
-}
-
-// ============== 主循环 ==============
-/**
- * 测试主流程
- */
-function testMainFlow() {
+function main() {
     log("========== DVA 测试 Agent 启动 ==========");
     
-    // 获取屏幕信息
-    let screenInfo = $screen.info();
-    log("屏幕信息:", JSON.stringify(screenInfo));
-    
-    // 初始化 HID
-    let hidResult = $hid.初始化();
-    log("HID 初始化:", hidResult);
-    
-    if (hidResult !== "true") {
-        log("HID 初始化失败，请检查键鼠连接");
-        toast("HID 初始化失败");
-        return;
+    // 检查 HID
+    if (!$hid.是开启的()) {
+        log("HID 未开启，需要连接键鼠硬件");
     }
     
-    // 测试截图
-    log("测试截图...");
+    // 获取屏幕信息
+    let screenInfo = $屏幕.信息();
+    log("屏幕信息:", screenInfo.w, "x", screenInfo.h);
+    
+    // 截图
+    log("开始截图...");
     let screenshot = takeScreenshot();
     if (!screenshot) {
-        log("截图测试失败");
+        log("截图失败，退出");
         return;
     }
     
-    // 保存测试截图
-    let testPath = "/sdcard/dva_test_screenshot.png";
-    saveScreenshot(screenshot, testPath);
+    // 保存截图
+    saveScreenshot(screenshot, "/sdcard/dva_test.png");
     
-    // 发送截图到服务器
-    log("发送截图到服务器分析...");
-    let command = sendScreenshotForAnalysis(screenshot, screenInfo);
+    // 发送到服务器
+    log("发送到服务器...");
+    let result = sendToServer(screenshot, screenInfo);
     
-    if (command) {
-        log("收到服务器指令:", JSON.stringify(command));
+    if (result) {
+        log("收到服务器响应");
         
-        // 执行指令
-        if (command.action) {
-            executeAction(command.action);
+        // 如果有操作指令就执行
+        if (result.action) {
+            executeAction(result.action);
         }
         
-        // 如果有后续指令
-        if (command.continueLoop) {
-            log("继续执行主循环...");
-            $thread.run(() => {
-                testMainFlow();
-            });
-        }
+        // 不再自动循环，等待手动重启
+        // 如果需要循环测试，可以修改 CONFIG.AUTO_LOOP = true
+        log("========== 单次测试完成 ==========");
+        log("如需继续测试，请重新运行脚本");
     } else {
-        log("未收到服务器指令");
+        log("未收到有效响应");
     }
     
-    log("========== DVA 测试 Agent 结束 ==========");
+    log("========== 测试结束 ==========");
 }
 
-/**
- * 简单的点击测试
- */
-function testClick(x, y) {
-    log("测试点击:", x, y);
-    
-    if (!$hid.是开启的()) {
-        let result = $hid.初始化();
-        if (result !== "true") {
-            log("HID 初始化失败:", result);
-            return false;
-        }
-    }
-    
-    return $hid.点击(x, y);
-}
-
-/**
- * 简单的滑动测试
- */
-function testSwipe(x1, y1, x2, y2) {
-    log("测试滑动:", x1, y1, "->", x2, y2);
-    
-    if (!$hid.是开启的()) {
-        let result = $hid.初始化();
-        if (result !== "true") {
-            log("HID 初始化失败:", result);
-            return false;
-        }
-    }
-    
-    return $hid.增强滑动(x1, y1, x2, y2);
-}
-
-// ============== 启动 ==============
-// 运行主测试流程
-testMainFlow();
-
-// 导出函数供外部调用
-module.exports = {
-    testClick,
-    testSwipe,
-    takeScreenshot,
-    executeAction,
-    detectWithYOLO,
-    recognizeText,
-    CONFIG
-};
+main();

@@ -59,11 +59,33 @@ class DVAHandler(BaseHTTPRequestHandler):
     
     def do_GET(self):
         """处理 GET 请求"""
-        if self.path == "/dva-test/status":
+        from urllib.parse import urlparse, parse_qs
+        
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+        
+        if path == "/dva-test/status":
             self.send_json_response({
                 "status": "running",
                 "uptime": time.time() - START_TIME,
                 "screenshots_received": SCREENSHOTS_RECEIVED
+            })
+        elif path == "/dva-test/analyze":
+            # GET 方式接收截图分析（通过 URL 参数）
+            img_len = query.get('img_len', [0])[0]
+            w = query.get('w', [0])[0]
+            h = query.get('h', [0])[0]
+            
+            log(f"收到 GET 分析请求: {w}x{h}, img_len={img_len}")
+            
+            self.send_json_response({
+                "status": "ok",
+                "message": "收到截图分析请求",
+                "img_len": img_len,
+                "w": w,
+                "h": h,
+                "continueLoop": True
             })
         else:
             self.send_json_response({"error": "Not found"}, 404)
