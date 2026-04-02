@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 /**
@@ -129,35 +128,25 @@ class VideoAnalysisViewModel @Inject constructor(
                     isAnalyzing = true
                 )
                 
-                // 开始分析（5分钟超时）
+                // 开始帧提取和模型推理
                 addLog("开始帧提取和模型推理...")
-                val result = withTimeoutOrNull(5 * 60 * 1000L) {
-                    analyzeVideoUseCase(
-                        videoPath = localVideoPath,
-                        onProgress = { progress ->
-                            val safeProgress = progress.coerceIn(0, 100)
-                            val currentFrame = (safeProgress * totalFrames) / 100
-                            _uiState.value = _uiState.value.copy(
-                                progress = safeProgress,
-                                currentFrame = currentFrame,
-                                analyzedFrames = currentFrame
-                            )
-                            if (safeProgress % 10 == 0) {
-                                addLog("分析进度: ${safeProgress}%")
-                            }
+                val result = analyzeVideoUseCase(
+                    videoPath = localVideoPath,
+                    onProgress = { progress ->
+                        val safeProgress = progress.coerceIn(0, 100)
+                        val currentFrame = (safeProgress * totalFrames) / 100
+                        _uiState.value = _uiState.value.copy(
+                            progress = safeProgress,
+                            currentFrame = currentFrame,
+                            analyzedFrames = currentFrame
+                        )
+                        if (safeProgress % 10 == 0) {
+                            addLog("分析进度: ${safeProgress}%")
                         }
-                    )
-                }
+                    }
+                )
                 
-                if (result == null) {
-                    // 超时
-                    addLog("分析超时（5分钟）")
-                    _uiState.value = _uiState.value.copy(
-                        isAnalyzing = false,
-                        errorMessage = "分析超时（5分钟），视频可能过大或网络存储较慢"
-                    )
-                } else {
-                    result.onSuccess { violations ->
+                result.onSuccess { violations ->
                         // 统计涉及车辆数（按车牌去重）
                         val uniquePlates = violations.mapNotNull { it.plateNumber }.distinct()
                         val vehicleCount = if (uniquePlates.isNotEmpty()) uniquePlates.size else violations.size
