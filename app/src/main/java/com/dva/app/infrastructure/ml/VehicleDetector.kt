@@ -13,8 +13,11 @@ import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtUtil
 import java.io.File
 import java.io.FileOutputStream
+import java.io.FileWriter
+import java.io.PrintWriter
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.text.SimpleDateFormat
 import java.nio.FloatBuffer
 
 /**
@@ -166,32 +169,47 @@ class YoloVehicleDetector(
             return emptyList()
         }
         
+        // 打开检测调试日志
+        val detectionLogFile = File(context.cacheDir, "models/detection_debug.log")
+        val logWriter = PrintWriter(FileWriter(detectionLogFile, false))
+        logWriter.println("=== Detection Debug Started at ${java.text.SimpleDateFormat("HH:mm:ss.SSS").format(java.util.Date())} ===")
+        logWriter.println("Total frames to process: ${frames.size}")
+        logWriter.flush()
+        
         val results = mutableListOf<VehicleDetection>()
         for ((frameIndex, frameData) in frames) {
             try {
-                val detections = detectFrame(frameIndex, frameData)
+                val detections = detectFrame(frameIndex, frameData, logWriter)
                 results.addAll(detections)
+                logWriter.println("Frame $frameIndex: ${detections.size} detections")
+                logWriter.flush()
             } catch (e: Exception) {
                 Log.e(TAG, "Error detecting frame $frameIndex", e)
+                logWriter.println("Frame $frameIndex ERROR: ${e::class.simpleName}: ${e.message}")
+                logWriter.flush()
             }
         }
+        
+        logWriter.println("=== Detection Complete: ${results.size} total detections ===")
+        logWriter.close()
+        
         return results
     }
     
     /**
      * 检测单帧中的车辆
      */
-    private fun detectFrame(frameIndex: Int, frameData: ByteArray): List<VehicleDetection> {
+    private fun detectFrame(frameIndex: Int, frameData: ByteArray, logWriter: PrintWriter): List<VehicleDetection> {
         if (ortSession == null) return emptyList()
         
         try {
             // 1. 解码图片
             val bitmap = BitmapFactory.decodeByteArray(frameData, 0, frameData.size)
             if (bitmap == null) {
-                Log.e(TAG, "Failed to decode bitmap for frame $frameIndex")
+                logWriter.println("Frame $frameIndex: Failed to decode bitmap")
                 return emptyList()
             }
-            Log.d(TAG, "Frame $frameIndex: bitmap ${bitmap.width}x${bitmap.height}")
+            logWriter.println("Frame $frameIndex: bitmap ${bitmap.width}x${bitmap.height}")
             
             // 2. 预处理图片 (resize + 归一化)
             val inputBuffer = preprocessImage(bitmap)
@@ -199,7 +217,7 @@ class YoloVehicleDetector(
             // 3. 创建输入 Tensor
             val inputShape = longArrayOf(1, 3, INPUT_SIZE.toLong(), INPUT_SIZE.toLong())
             val inputTensor = OnnxTensor.createTensor(ortEnvironment, inputBuffer, inputShape)
-            Log.d(TAG, "Input tensor created: ${inputShape.contentToString()}")
+            logWriter.println("Input tensor created: ${inputShape.contentToString()}")
             
             // 4. 运行推理
             val inputs = mapOf("images" to inputTensor)
@@ -207,32 +225,40 @@ class YoloVehicleDetector(
             
             // 6. 检查输出
             if (outputs == null) {
-                Log.e(TAG, "Outputs is null!")
+                logWriter.println("Frame $frameIndex: Outputs is null!")
                 inputTensor.close()
                 bitmap.recycle()
                 return emptyList()
             }
             
             val outputValue = outputs.get(0).value
-            Log.d(TAG, "Output type: ${outputValue::class.java}, shape check...")
+            logWriter.println("Frame $frameIndex: Output type: ${outputValue::class.java}")
             
             // 7. 解析输出
             when (outputValue) {
                 is Array<*> -> {
-                    Log.d(TAG, "Output is Array, size: ${outputValue.size}")
+                    logWriter.println("Frame $frameIndex: Output is Array, size: ${outputValue.size}")
                     if (outputValue.isNotEmpty()) {
-                        Log.d(TAG, "First element type: ${outputValue[0]::class.java}")
+                        logWriter.println("Frame $frameIndex: First element type: ${outputValue[0]::class.java}")
+                        if (outputValue[0] is Array<*>) {
+                            val inner = outputValue[0] as Array<*>
+                            logWriter.println("Frame $frameIndex: Inner array size: ${inner.size}")
+                            if (inner.isNotEmpty()) {
+                                logWriter.println("Frame $frameIndex: Inner[0] type: ${inner[0]::class.java}")
+                            }
+                        }
                     }
                 }
-                else -> Log.d(TAG, "Output is not Array: ${outputValue::class.java}")
+                else -> logWriter.println("Frame $frameIndex: Output is not Array: ${outputValue::class.java}")
             }
             
             // 5. 解析输出
             val outputTensor = outputs?.get(0)?.value as? Array<Array<FloatArray>>
             val detections = if (outputTensor != null) {
-                postProcessOutput(outputTensor, bitmap.width, bitmap.height, frameIndex)
+                logWriter.println("Frame $frameIndex: Calling postProcessOutput with tensor shape [${outputTensor.size}][${outputTensor[0]?.size ?: 0}]")
+                postProcessOutput(outputTensor, bitmap.width, bitmap.height, frameIndex, logWriter)
             } else {
-                Log.e(TAG, "Output tensor is null")
+                logWriter.println("Frame $frameIndex: Output tensor is null or wrong type")
                 emptyList()
             }
             
@@ -244,7 +270,7 @@ class YoloVehicleDetector(
             return detections
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error in detectFrame for frame $frameIndex", e)
+            logWriter.println("Frame $frameIndex: Exception: ${e::class.simpleName}: ${e.message}")
             e.printStackTrace()
             return emptyList()
         }
@@ -303,15 +329,17 @@ class YoloVehicleDetector(
         output: Array<Array<FloatArray>>,
         originalWidth: Int,
         originalHeight: Int,
-        frameIndex: Int
+        frameIndex: Int,
+        logWriter: PrintWriter
     ): List<VehicleDetection> {
         val detections = mutableListOf<VehicleDetection>()
         
         // YOLOv8 输出: [batch, 84, 8400]
         val predictions = output[0] // shape: [84, 8400]
+        logWriter.println("postProcess: predictions shape [${predictions.size}][${predictions[0]?.size ?: 0}]")
         
         // 遍历所有预测框
-        for (i in 0 until NUM_BOXES) {
+        for (i in 0 until minOf(NUM_BOXES, predictions[0]?.size ?: 0)) {
             // 获取该框的类别分数
             var maxScore = 0f
             var maxClassId = -1
