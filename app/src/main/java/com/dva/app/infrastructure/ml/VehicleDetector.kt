@@ -201,11 +201,7 @@ class YoloVehicleDetector(
             val inputTensor = OnnxTensor.createTensor(ortEnvironment, inputBuffer, inputShape)
             Log.d(TAG, "Input tensor created: ${inputShape.contentToString()}")
             
-            // 4. 获取模型的输入输出名称
-            val sessionInfo = ortSession?.sessionInfo
-            Log.d(TAG, "Session info: $sessionInfo")
-            
-            // 5. 运行推理
+            // 4. 运行推理
             val inputs = mapOf("images" to inputTensor)
             val outputs = ortSession?.run(inputs)
             
