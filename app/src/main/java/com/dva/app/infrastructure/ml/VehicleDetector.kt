@@ -338,6 +338,9 @@ class YoloVehicleDetector(
         val predictions = output[0] // shape: [84, 8400]
         logWriter.println("postProcess: predictions shape [${predictions.size}][${predictions[0]?.size ?: 0}]")
         
+        // 收集所有有效检测
+        val rawDetections = mutableListOf<VehicleDetection>()
+        
         // 遍历所有预测框
         for (i in 0 until minOf(NUM_BOXES, predictions[0]?.size ?: 0)) {
             // 获取该框的类别分数
@@ -373,10 +376,13 @@ class YoloVehicleDetector(
                 val clampedRight = right.toFloat().coerceIn(0f, originalWidth.toFloat())
                 val clampedBottom = bottom.toFloat().coerceIn(0f, originalHeight.toFloat())
                 
-                detections.add(
+                // 临时使用 list index 作为 trackId（用于区分同一帧中的不同车辆）
+                val tempTrackId = rawDetections.size
+                
+                rawDetections.add(
                     VehicleDetection(
                         frameIndex = frameIndex,
-                        trackId = 0, // 暂时不追踪
+                        trackId = tempTrackId,
                         classId = maxClassId,
                         className = getClassName(maxClassId),
                         confidence = maxScore,
@@ -394,11 +400,15 @@ class YoloVehicleDetector(
         }
         
         // 应用 NMS (非极大值抑制)
-        val nmsDetections = applyNMS(detections)
+        val nmsDetections = applyNMS(rawDetections)
         
-        Log.d(TAG, "Frame $frameIndex: ${nmsDetections.size} vehicles detected")
+        // 重新分配唯一的 trackId（基于 NMS 后的顺序）
+        var trackCounter = 0
+        val trackedDetections = nmsDetections.map { it.copy(trackId = trackCounter++) }
         
-        return nmsDetections
+        Log.d(TAG, "Frame $frameIndex: ${trackedDetections.size} vehicles detected")
+        
+        return trackedDetections
     }
     
     /**

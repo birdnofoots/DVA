@@ -67,6 +67,9 @@ class AnalyzeVideoUseCase(
             val videoInfo = videoRepository.getVideoInfo(videoPath)
                 ?: return Result.failure(Exception("无法读取视频信息"))
             
+            // 重置分析器状态（新视频开始）
+            violationAnalyzer.reset()
+            
             // 初始化处理状态
             videoRepository.updateProcessingState(
                 VideoProcessingState(

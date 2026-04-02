@@ -26,6 +26,11 @@ interface ViolationAnalyzer {
         vehicles: List<VehicleDetection>,
         lanes: List<LaneDetection>
     ): List<ViolationEvent>
+    
+    /**
+     * 重置分析器状态（新视频开始时调用）
+     */
+    fun reset()
 }
 
 /**
@@ -139,7 +144,7 @@ class LaneChangeViolationAnalyzer : ViolationAnalyzer {
     /**
      * 清除历史数据（处理新视频时调用）
      */
-    fun reset() {
+    override fun reset() {
         vehicleTrajectories.clear()
         lastViolationFrame.clear()
     }
