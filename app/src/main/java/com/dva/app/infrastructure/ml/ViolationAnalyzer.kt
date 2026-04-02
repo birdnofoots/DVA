@@ -163,4 +163,8 @@ class RedLightViolationAnalyzer : ViolationAnalyzer {
         // TODO: 需要信号灯检测模型配合
         return emptyList()
     }
+    
+    override fun reset() {
+        // 闯红灯分析器暂无状态
+    }
 }
