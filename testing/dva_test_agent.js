@@ -16,7 +16,7 @@
 // ============== 配置 ==============
 let CONFIG = {
     // AI 服务器地址（修改为你的服务器 IP）
-    SERVER_URL: "http://192.168.1.81:18790/dva-test",
+    SERVER_URL: "http://100.91.119.94:18791/dva-test",
     
     // 是否显示调试信息
     DEBUG: true,

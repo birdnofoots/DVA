@@ -25,7 +25,7 @@ from urllib.parse import urlparse, parse_qs
 from datetime import datetime
 
 # 配置
-PORT = 18790
+PORT = 18791
 HOST = "0.0.0.0"
 DEBUG = True
 
