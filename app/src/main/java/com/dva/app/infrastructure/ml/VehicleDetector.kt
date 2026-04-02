@@ -1,18 +1,13 @@
 package com.dva.app.infrastructure.ml
 
 import android.content.Context
-import android.content.res.AssetManager
 import android.util.Log
 import com.dva.app.domain.model.VehicleDetection
 import com.dva.app.domain.model.BoundingBox
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
-import ai.onnxruntime.OnnxTensor
-import ai.onnxruntime.OrtUtil
 import java.io.File
 import java.io.FileOutputStream
-import java.nio.ByteBuffer
-import java.nio.FloatBuffer
 
 /**
  * 车辆检测器接口
@@ -65,63 +60,49 @@ class YoloVehicleDetector(
     override fun isModelAvailable() = _isModelLoaded
     
     init {
+        Log.d(TAG, "=== YoloVehicleDetector initializing ===")
+        
+        // 方法1: 从 assets 直接加载 ByteArray
         try {
-            Log.d(TAG, "Initializing YoloVehicleDetector...")
+            Log.d(TAG, "Method 1: Loading from assets as ByteArray...")
+            val modelBytes = context.assets.open(ASSETS_MODEL_PATH).readBytes()
+            Log.d(TAG, "  Read ${modelBytes.size} bytes from assets")
             
-            // 方法1: 尝试从 assets 直接加载模型（作为 ByteArray）
-            val modelBytes = loadModelFromAssets()
-            if (modelBytes != null) {
-                Log.d(TAG, "Model loaded from assets, size: ${modelBytes.size}")
-                try {
-                    ortEnvironment = OrtEnvironment.getEnvironment()
-                    ortSession = ortEnvironment?.createSession(modelBytes)
-                    _isModelLoaded = ortSession != null
-                    Log.d(TAG, "Model created from ByteArray, success: $_isModelLoaded")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to create session from ByteArray", e)
-                    _isModelLoaded = false
-                }
-            } else {
-                Log.e(TAG, "Failed to load model from assets as ByteArray")
-                
-                // 方法2: 复制到缓存后加载
+            ortEnvironment = OrtEnvironment.getEnvironment()
+            Log.d(TAG, "  Created OrtEnvironment")
+            
+            ortSession = ortEnvironment?.createSession(modelBytes)
+            Log.d(TAG, "  Created OrtSession from ByteArray")
+            
+            _isModelLoaded = ortSession != null
+            Log.d(TAG, "  Model loaded: $_isModelLoaded")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Method 1 failed: ${e::class.simpleName}: ${e.message}")
+            e.printStackTrace()
+            
+            // 方法2: 复制到缓存后从文件加载
+            try {
+                Log.d(TAG, "Method 2: Copying to cache and loading from file...")
                 val modelFile = copyModelToCache()
                 if (modelFile != null && modelFile.exists()) {
-                    Log.d(TAG, "Trying to load from file: ${modelFile.absolutePath}")
-                    try {
-                        ortEnvironment = OrtEnvironment.getEnvironment()
-                        ortSession = ortEnvironment?.createSession(modelFile.absolutePath)
-                        _isModelLoaded = ortSession != null
-                        Log.d(TAG, "Model loaded from file, success: $_isModelLoaded")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to create session from file", e)
-                        _isModelLoaded = false
-                    }
+                    Log.d(TAG, "  Model file exists: ${modelFile.absolutePath}, size: ${modelFile.length()}")
+                    
+                    ortEnvironment = OrtEnvironment.getEnvironment()
+                    ortSession = ortEnvironment?.createSession(modelFile.absolutePath)
+                    
+                    _isModelLoaded = ortSession != null
+                    Log.d(TAG, "  Model loaded from file: $_isModelLoaded")
                 } else {
-                    Log.e(TAG, "Model file not found in cache either")
-                    _isModelLoaded = false
+                    Log.e(TAG, "  Model file not found after copy")
                 }
+            } catch (e2: Exception) {
+                Log.e(TAG, "Method 2 also failed: ${e2::class.simpleName}: ${e2.message}")
+                e2.printStackTrace()
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize YoloVehicleDetector", e)
-            _isModelLoaded = false
         }
         
-        Log.d(TAG, "YoloVehicleDetector initialization complete. Model available: $_isModelLoaded")
-    }
-    
-    /**
-     * 从 assets 加载模型作为 ByteArray
-     */
-    private fun loadModelFromAssets(): ByteArray? {
-        return try {
-            context.assets.open(ASSETS_MODEL_PATH).use { input ->
-                input.readBytes()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to load model from assets", e)
-            null
-        }
+        Log.d(TAG, "=== YoloVehicleDetector init complete. Available: $_isModelLoaded ===")
     }
     
     /**
@@ -130,26 +111,27 @@ class YoloVehicleDetector(
     private fun copyModelToCache(): File? {
         return try {
             val cacheDir = File(context.cacheDir, MODEL_CACHE_DIR)
-            if (!cacheDir.exists()) {
-                cacheDir.mkdirs()
-            }
+            Log.d(TAG, "  Creating cache dir: ${cacheDir.absolutePath}")
+            cacheDir.mkdirs()
             
             val destFile = File(cacheDir, MODEL_FILE_NAME)
-            if (destFile.exists()) {
-                Log.d(TAG, "Model already exists at: ${destFile.absolutePath}")
-                return destFile
-            }
             
-            context.assets.open(ASSETS_MODEL_PATH).use { input ->
-                FileOutputStream(destFile).use { output ->
-                    input.copyTo(output)
+            if (!destFile.exists()) {
+                Log.d(TAG, "  Copying model from assets to: ${destFile.absolutePath}")
+                context.assets.open(ASSETS_MODEL_PATH).use { input ->
+                    FileOutputStream(destFile).use { output ->
+                        input.copyTo(output)
+                    }
                 }
+                Log.d(TAG, "  Copy complete, size: ${destFile.length()}")
+            } else {
+                Log.d(TAG, "  Model already exists in cache")
             }
             
-            Log.d(TAG, "Model copied to: ${destFile.absolutePath}, size: ${destFile.length()}")
             destFile
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to copy model to cache", e)
+            Log.e(TAG, "  Failed to copy model: ${e::class.simpleName}: ${e.message}")
+            e.printStackTrace()
             null
         }
     }
@@ -180,7 +162,6 @@ class YoloVehicleDetector(
         
         try {
             // TODO: 实现真实的 YOLOv8 推理
-            // 目前返回空，等修复后启用
             return emptyList()
         } catch (e: Exception) {
             Log.e(TAG, "Error in detectFrame", e)
