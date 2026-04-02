@@ -139,4 +139,29 @@ class VideoListViewModel @Inject constructor(
             }
         }
     }
+    
+    /**
+     * 复制视频到本地缓存（接受String路径）
+     */
+    fun copyVideoToCacheAndAnalyze(videoPath: String, callback: (localPath: String?, error: String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                // 如果已经是本地路径，直接返回
+                if (!videoPath.startsWith("content://")) {
+                    callback(videoPath, null)
+                    return@launch
+                }
+                
+                // 复制到本地缓存
+                val path = videoRepository.copyToLocalCache(videoPath)
+                if (path != null) {
+                    callback(path, null)
+                } else {
+                    callback(null, "无法复制视频到本地缓存，请检查文件是否存在")
+                }
+            } catch (e: Exception) {
+                callback(null, "复制失败: ${e.message}")
+            }
+        }
+    }
 }

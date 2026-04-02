@@ -216,7 +216,23 @@ fun VideoListScreen(
                     items(videos) { video ->
                         VideoListItem(
                             video = video,
-                            onClick = { onVideoSelected(video.path) }
+                            onClick = {
+                                // 如果是 SAF URI，先复制到本地缓存
+                                if (video.path.startsWith("content://")) {
+                                    GlobalVideoState.updateLoading(true)
+                                    viewModel.copyVideoToCacheAndAnalyze(video.path) { localPath, error ->
+                                        GlobalVideoState.updateLoading(false)
+                                        if (localPath != null) {
+                                            onVideoSelected(localPath)
+                                        } else {
+                                            GlobalVideoState.updateError(error ?: "无法复制视频")
+                                        }
+                                    }
+                                } else {
+                                    // 本地路径直接使用
+                                    onVideoSelected(video.path)
+                                }
+                            }
                         )
                     }
                 }

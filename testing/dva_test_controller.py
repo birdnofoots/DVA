@@ -87,6 +87,39 @@ class DVAHandler(BaseHTTPRequestHandler):
                 "h": h,
                 "continueLoop": True
             })
+        
+        elif path == "/dva-test/dva_test":
+            # DVA 自动化测试接口
+            action = query.get('action', ['analyze'])[0]
+            
+            log(f"DVA 测试请求: action={action}")
+            
+            # 返回测试指令
+            result = {
+                "status": "ok",
+                "action": action,
+                "message": "等待执行",
+                "screen": {
+                    "width": int(query.get('w', [1440])[0]),
+                    "height": int(query.get('h', [3168])[0])
+                }
+            }
+            
+            # 根据不同 action 返回不同指令
+            if action == "ui_analysis":
+                result["message"] = "UI 分析模式，请发送截图"
+                result["continueLoop"] = True
+            elif action == "analyze":
+                result["message"] = "开始分析"
+                result["continueLoop"] = True
+            elif action == "check_result":
+                result["message"] = "检查结果"
+                result["continueLoop"] = False
+            else:
+                result["message"] = f"未知 action: {action}"
+                result["continueLoop"] = False
+            
+            self.send_json_response(result)
         else:
             self.send_json_response({"error": "Not found"}, 404)
     
