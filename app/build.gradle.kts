@@ -14,8 +14,8 @@ android {
         applicationId = "com.dva.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 14
-        versionName = "1.6.9"
+        versionCode = 15
+        versionName = "1.6.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

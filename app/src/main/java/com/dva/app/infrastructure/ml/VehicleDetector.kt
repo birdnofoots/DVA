@@ -191,6 +191,7 @@ class YoloVehicleDetector(
                 Log.e(TAG, "Failed to decode bitmap for frame $frameIndex")
                 return emptyList()
             }
+            Log.d(TAG, "Frame $frameIndex: bitmap ${bitmap.width}x${bitmap.height}")
             
             // 2. 预处理图片 (resize + 归一化)
             val inputBuffer = preprocessImage(bitmap)
@@ -198,10 +199,37 @@ class YoloVehicleDetector(
             // 3. 创建输入 Tensor
             val inputShape = longArrayOf(1, 3, INPUT_SIZE.toLong(), INPUT_SIZE.toLong())
             val inputTensor = OnnxTensor.createTensor(ortEnvironment, inputBuffer, inputShape)
+            Log.d(TAG, "Input tensor created: ${inputShape.contentToString()}")
             
-            // 4. 运行推理
+            // 4. 获取模型的输入输出名称
+            val sessionInfo = ortSession?.sessionInfo
+            Log.d(TAG, "Session info: $sessionInfo")
+            
+            // 5. 运行推理
             val inputs = mapOf("images" to inputTensor)
             val outputs = ortSession?.run(inputs)
+            
+            // 6. 检查输出
+            if (outputs == null) {
+                Log.e(TAG, "Outputs is null!")
+                inputTensor.close()
+                bitmap.recycle()
+                return emptyList()
+            }
+            
+            val outputValue = outputs.get(0).value
+            Log.d(TAG, "Output type: ${outputValue::class.java}, shape check...")
+            
+            // 7. 解析输出
+            when (outputValue) {
+                is Array<*> -> {
+                    Log.d(TAG, "Output is Array, size: ${outputValue.size}")
+                    if (outputValue.isNotEmpty()) {
+                        Log.d(TAG, "First element type: ${outputValue[0]::class.java}")
+                    }
+                }
+                else -> Log.d(TAG, "Output is not Array: ${outputValue::class.java}")
+            }
             
             // 5. 解析输出
             val outputTensor = outputs?.get(0)?.value as? Array<Array<FloatArray>>
