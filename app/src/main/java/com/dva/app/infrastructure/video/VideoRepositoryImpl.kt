@@ -8,6 +8,8 @@ import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.DocumentsContract
+import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.ReturnCode
 import com.dva.app.domain.model.VideoFile
 import com.dva.app.domain.model.VideoProcessingState
 import com.dva.app.domain.model.ProcessingStatus
@@ -22,13 +24,16 @@ import java.nio.ByteBuffer
 
 /**
  * Android 视频仓库实现
- * 使用 MediaCodec 进行视频解码和帧提取
+ * 使用 MediaCodec 和 FFmpegKit 进行视频解码和帧提取
  */
 class VideoRepositoryImpl(
     private val context: Context
 ) : VideoRepository {
     
     private val processingStates = mutableMapOf<String, MutableStateFlow<VideoProcessingState>>()
+    
+    // FFmpeg 帧提取器（用于支持更多视频格式如 .dav）
+    private val ffmpegExtractor by lazy { FfmpegFrameExtractor(context) }
     
     override suspend fun scanDirectory(directoryPath: String): List<VideoFile> = withContext(Dispatchers.IO) {
         val directory = File(directoryPath)
@@ -296,6 +301,29 @@ class VideoRepositoryImpl(
     }
     
     override suspend fun getVideoInfo(videoPath: String): VideoFile? = withContext(Dispatchers.IO) {
+        // 首先尝试使用 FFmpegKit 获取视频信息（支持更多格式如 .dav）
+        if (!videoPath.startsWith("content://")) {
+            try {
+                val ffmpegInfo = ffmpegExtractor.getVideoInfo(videoPath)
+                if (ffmpegInfo != null) {
+                    val file = File(videoPath)
+                    return@withContext VideoFile(
+                        path = videoPath,
+                        name = file.name,
+                        durationMs = ffmpegInfo.durationMs,
+                        width = ffmpegInfo.width,
+                        height = ffmpegInfo.height,
+                        fps = ffmpegInfo.fps,
+                        frameCount = ffmpegInfo.frameCount,
+                        fileSize = file.length()
+                    )
+                }
+            } catch (e: Exception) {
+                // FFmpegKit 失败，继续使用 MediaMetadataRetriever
+            }
+        }
+        
+        // 降级方案：使用 MediaMetadataRetriever
         try {
             val retriever = MediaMetadataRetriever()
             

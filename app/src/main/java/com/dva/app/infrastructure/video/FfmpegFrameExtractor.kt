@@ -5,16 +5,18 @@ import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
+import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.FFmpegKitConfig
+import com.arthenica.ffmpegkit.ReturnCode
+import com.arthenica.ffmpegkit.Statistics
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 
 /**
- * 帧提取器
- * 目前使用 MediaMetadataRetriever
- * 未来可升级为 FFmpegKit 以获得更好的性能
+ * FFmpegKit 帧提取器
+ * 用于从各种格式的视频中提取帧，包括 .dav 监控格式
  */
 class FfmpegFrameExtractor(private val context: Context) {
     
@@ -22,106 +24,160 @@ class FfmpegFrameExtractor(private val context: Context) {
         private const val TAG = "FfmpegFrameExtractor"
     }
     
-    private val _progress = MutableStateFlow(0)
-    val progress: StateFlow<Int> = _progress
-    
     /**
-     * 提取单帧
+     * 使用 FFmpeg 提取指定时间戳的帧
+     * @param videoPath 视频路径（本地文件路径）
+     * @param timeUs 时间戳（微秒）
+     * @param outputPath 输出图片路径
+     * @return 是否成功
      */
-    suspend fun extractFrame(
-        inputPath: String,
-        frameIndex: Int,
-        outputPath: String? = null
-    ): ByteArray? = withContext(Dispatchers.IO) {
+    suspend fun extractFrame(videoPath: String, timeUs: Long, outputPath: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val retriever = MediaMetadataRetriever()
+            // FFmpeg 时间格式: HH:MM:SS.microseconds
+            val timeStr = formatTime(timeUs / 1000000.0)
             
-            if (inputPath.startsWith("content://")) {
-                retriever.setDataSource(context, Uri.parse(inputPath))
+            val command = "-y -ss $timeStr -i \"$videoPath\" -vframes 1 -q:v 2 \"$outputPath\""
+            
+            Log.d(TAG, "FFmpeg extract: $command")
+            
+            val session = FFmpegKit.execute(command)
+            
+            val returnCode = session.returnCode
+            
+            if (ReturnCode.isSuccess(returnCode)) {
+                Log.d(TAG, "Frame extracted successfully: $outputPath")
+                true
             } else {
-                retriever.setDataSource(inputPath)
+                Log.e(TAG, "FFmpeg extract failed: ${session.failStackTrace}")
+                false
             }
-            
-            val timeUs = (frameIndex * 1000000L / 25)
-            val frame = retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
-            retriever.release()
-            
-            frame?.let { bitmapToJpeg(it) }
         } catch (e: Exception) {
-            Log.e(TAG, "extractFrame failed", e)
-            null
+            Log.e(TAG, "FFmpeg extract exception", e)
+            false
         }
     }
     
     /**
-     * 批量提取帧（按间隔）
+     * 使用 FFmpeg 获取视频信息
      */
-    suspend fun extractFrameRange(
-        inputPath: String,
-        startFrame: Int,
-        endFrame: Int,
-        interval: Int = 1,
-        onProgress: ((Int) -> Unit)? = null
-    ): List<Pair<Int, ByteArray>> = withContext(Dispatchers.IO) {
-        val frames = mutableListOf<Pair<Int, ByteArray>>()
-        val totalFrames = ((endFrame - startFrame) / interval).coerceAtLeast(1)
-        var processed = 0
-        
-        for (frameIndex in startFrame until endFrame step interval) {
-            val frameData = extractFrame(inputPath, frameIndex)
-            if (frameData != null) {
-                frames.add(Pair(frameIndex, frameData))
-            }
-            
-            processed++
-            val progressPercent = (processed * 100) / totalFrames
-            _progress.value = progressPercent
-            onProgress?.invoke(progressPercent)
-        }
-        
-        frames
-    }
-    
-    /**
-     * 获取视频信息
-     */
-    suspend fun getVideoInfo(inputPath: String): VideoInfo? = withContext(Dispatchers.IO) {
+    suspend fun getVideoInfo(videoPath: String): VideoInfo? = withContext(Dispatchers.IO) {
         try {
-            val retriever = MediaMetadataRetriever()
+            // 使用 FFprobe 获取视频信息
+            val command = "-v quiet -print_format json -show_format -show_streams \"$videoPath\""
             
-            if (inputPath.startsWith("content://")) {
-                retriever.setDataSource(context, Uri.parse(inputPath))
+            val session = FFmpegKit.execute(command)
+            val output = session.output
+            
+            if (ReturnCode.isSuccess(session.returnCode) && output != null) {
+                parseVideoInfo(output)
             } else {
-                retriever.setDataSource(inputPath)
+                Log.e(TAG, "FFprobe failed: ${session.failStackTrace}")
+                // 降级到 MediaMetadataRetriever
+                getVideoInfoFallback(videoPath)
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "FFprobe exception", e)
+            getVideoInfoFallback(videoPath)
+        }
+    }
+    
+    /**
+     * 解析 FFprobe 输出
+     */
+    private fun parseVideoInfo(json: String): VideoInfo? {
+        try {
+            // 简单的 JSON 解析（避免引入 Gson 依赖）
+            val width = json.extractJsonInt("width")
+            val height = json.extractJsonInt("height")
+            val duration = json.extractJsonDouble("duration")
+            val fps = json.extractJsonDouble("r_frame_rate")
+            
+            if (width != null && height != null) {
+                val fpsValue = if (fps != null) {
+                    // fps 可能是 "30/1" 格式
+                    val parts = fps.toString().split("/")
+                    if (parts.size == 2) {
+                        parts[0].toDouble() / parts[1].toDouble()
+                    } else {
+                        fps
+                    }
+                } else 25.0
+                
+                val frameCount = if (duration != null && fpsValue > 0) {
+                    (duration * fpsValue).toInt()
+                } else 0
+                
+                return VideoInfo(
+                    width = width,
+                    height = height,
+                    durationMs = ((duration ?: 0.0) * 1000).toLong(),
+                    fps = fpsValue.toFloat(),
+                    frameCount = frameCount
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "JSON parse error", e)
+        }
+        return null
+    }
+    
+    /**
+     * 降级方案：使用 MediaMetadataRetriever 获取视频信息
+     */
+    private fun getVideoInfoFallback(videoPath: String): VideoInfo? {
+        return try {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(videoPath)
             
             val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0
             val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
             val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            val fpsStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)
+            val fps = fpsStr?.toFloatOrNull() ?: 25f
             
             retriever.release()
             
-            val fps = 25f
-            val frameCount = ((duration / 1000.0) * fps).toInt()
-            
-            VideoInfo(duration, width, height, fps, frameCount)
+            VideoInfo(
+                width = width,
+                height = height,
+                durationMs = duration,
+                fps = fps,
+                frameCount = ((duration / 1000.0) * fps).toInt()
+            )
         } catch (e: Exception) {
-            Log.e(TAG, "getVideoInfo failed", e)
+            Log.e(TAG, "MediaMetadataRetriever fallback failed", e)
             null
         }
     }
     
-    private fun bitmapToJpeg(bitmap: Bitmap, quality: Int = 90): ByteArray {
-        val stream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, stream)
-        return stream.toByteArray()
+    /**
+     * 格式化为 FFmpeg 时间格式
+     */
+    private fun formatTime(seconds: Double): String {
+        val hours = (seconds / 3600).toInt()
+        val minutes = ((seconds % 3600) / 60).toInt()
+        val secs = seconds % 60
+        return String.format("%02d:%02d:%06.3f", hours, minutes, secs)
     }
     
     data class VideoInfo(
-        val duration: Long,
         val width: Int,
         val height: Int,
+        val durationMs: Long,
         val fps: Float,
         val frameCount: Int
     )
+}
+
+// 扩展函数：简单的 JSON 解析
+private fun String.extractJsonInt(key: String): Int? {
+    val pattern = "\"$key\"\\s*:\\s*(\\d+)"
+    val regex = Regex(pattern)
+    return regex.find(this)?.groupValues?.get(1)?.toIntOrNull()
+}
+
+private fun String.extractJsonDouble(key: String): Double? {
+    val pattern = "\"$key\"\\s*:\\s*([\\d.]+)"
+    val regex = Regex(pattern)
+    return regex.find(this)?.groupValues?.get(1)?.toDoubleOrNull()
 }

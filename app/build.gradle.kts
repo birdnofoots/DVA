@@ -14,8 +14,8 @@ android {
         applicationId = "com.dva.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.5.0"
+        versionCode = 6
+        versionName = "1.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -103,8 +103,9 @@ dependencies {
     val onnxVersion = "1.16.2"
     implementation("com.microsoft.onnxruntime:onnxruntime-android:$onnxVersion")
     
-    // FFmpegKit for fast video frame extraction (temporarily disabled for build)
-    // implementation("com.arthenica:ffmpeg-kit-full:6.0-2")
+    // FFmpegKit for fast video frame extraction
+    // 使用 min 版本减小体积，只支持 arm64-v8a
+    implementation("com.arthenica:ffmpeg-kit-min:6.0-2")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
