@@ -65,16 +65,27 @@ class YoloVehicleDetector(
             // 获取模型文件
             val modelFile = getModelFile()
             if (modelFile != null && modelFile.exists()) {
-                Log.d(TAG, "Loading model from: ${modelFile.absolutePath}")
+                Log.d(TAG, "Loading model from: ${modelFile.absolutePath}, size: ${modelFile.length()}")
                 
                 // 创建 ONNX Runtime session
-                ortEnvironment = OrtEnvironment.getEnvironment()
-                ortSession = ortEnvironment?.createSession(modelFile.absolutePath)
-                
-                _isModelLoaded = ortSession != null
-                Log.d(TAG, "Model loaded successfully: $_isModelLoaded")
+                try {
+                    ortEnvironment = OrtEnvironment.getEnvironment()
+                    val sessionOptions = OrtSession.SessionOptions()
+                    ortSession = ortEnvironment?.createSession(modelFile.absolutePath, sessionOptions)
+                    
+                    _isModelLoaded = ortSession != null
+                    Log.d(TAG, "Model loaded successfully: $_isModelLoaded")
+                    
+                    if (ortSession != null) {
+                        Log.d(TAG, "ONNX Runtime version: ${OrtEnvironment.getRuntimeVersion()}")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "ONNX Runtime error", e)
+                    _isModelLoaded = false
+                }
             } else {
                 Log.e(TAG, "Model file not found at: $modelPath")
+                Log.e(TAG, "Please check if assets/models/yolov8n-vehicle.onnx exists")
                 _isModelLoaded = false
             }
         } catch (e: Exception) {
@@ -88,12 +99,18 @@ class YoloVehicleDetector(
      * 优先从 filesDir 加载，其次从 assets 加载
      */
     private fun getModelFile(): File? {
+        Log.d(TAG, "Looking for model: $MODEL_FILE_NAME")
+        Log.d(TAG, "filesDir: ${context.filesDir.absolutePath}")
+        Log.d(TAG, "cacheDir: ${context.cacheDir.absolutePath}")
+        Log.d(TAG, "assets path: $ASSETS_MODEL_PATH")
+        
         // 1. 先检查 filesDir 中的模型（下载的模型）
         val filesDirModel = File(context.filesDir, "$MODEL_CACHE_DIR/$MODEL_FILE_NAME")
         if (filesDirModel.exists()) {
             Log.d(TAG, "Model found in filesDir: ${filesDirModel.absolutePath}")
             return filesDirModel
         }
+        Log.d(TAG, "Model NOT in filesDir")
         
         // 2. 检查缓存目录（ModelDownloadManager 下载的位置）
         val cacheDirModel = File(context.cacheDir, "$MODEL_CACHE_DIR/$MODEL_FILE_NAME")
@@ -121,16 +138,19 @@ class YoloVehicleDetector(
     private fun copyAssetToCache(): File? {
         return try {
             val cacheDir = File(context.cacheDir, MODEL_CACHE_DIR)
-            if (!cacheDir.exists()) {
-                cacheDir.mkdirs()
-            }
+            Log.d(TAG, "Creating cache dir: ${cacheDir.absolutePath}")
+            val created = cacheDir.mkdirs()
+            Log.d(TAG, "mkdirs result: $created, exists: ${cacheDir.exists()}")
             
             val destFile = File(cacheDir, MODEL_FILE_NAME)
             if (destFile.exists()) {
+                Log.d(TAG, "Model already exists at: ${destFile.absolutePath}")
                 return destFile
             }
             
-            context.assets.open(ASSETS_MODEL_PATH).use { input ->
+            Log.d(TAG, "Trying to open assets: $ASSETS_MODEL_PATH")
+            val inputStream = context.assets.open(ASSETS_MODEL_PATH)
+            inputStream.use { input ->
                 FileOutputStream(destFile).use { output ->
                     input.copyTo(output)
                 }
@@ -140,6 +160,11 @@ class YoloVehicleDetector(
             destFile
         } catch (e: Exception) {
             Log.e(TAG, "Failed to copy model from assets", e)
+            Log.e(TAG, "Exception type: ${e::class.simpleName}")
+            Log.e(TAG, "Exception message: ${e.message}")
+            if (e is java.io.FileNotFoundException) {
+                Log.e(TAG, "File not found in assets! Check if assets/models/yolov8n-vehicle.onnx exists")
+            }
             null
         }
     }
