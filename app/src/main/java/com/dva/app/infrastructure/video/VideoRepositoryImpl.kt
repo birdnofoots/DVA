@@ -436,15 +436,19 @@ class VideoRepositoryImpl(
                 retriever.setDataSource(videoPath)
             }
             
-            val timeUs = (frameIndex * 1000000L / 25) // 假设25fps
+            val fps = getFps(videoPath) ?: 25f
+            val timeUs = (frameIndex * 1000000L / fps).toLong()
             val frame = retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
             
             retriever.release()
             
-            // 返回 JPEG 编码的图片数据，而不是原始 RGB
+            // 返回 JPEG 编码的图片数据（已缩小到 640x640）
             frame?.let { bitmap ->
+                // 缩小到 640x640
+                val scaled = android.graphics.Bitmap.createScaledBitmap(bitmap, 640, 640, true)
                 val outputStream = java.io.ByteArrayOutputStream()
-                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, outputStream)
+                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, outputStream)
+                if (scaled != bitmap) scaled.recycle()
                 outputStream.toByteArray()
             }
         } catch (e: Exception) {
@@ -452,21 +456,146 @@ class VideoRepositoryImpl(
         }
     }
     
+    /**
+     * 使用 FFmpegKit 批量提取帧（优化版）
+     * 直接缩小到 640x640 并输出 JPEG，大幅提升性能
+     */
     override suspend fun extractFrameRange(
         videoPath: String,
         startFrame: Int,
         endFrame: Int,
         interval: Int
     ): List<Pair<Int, ByteArray>> = withContext(Dispatchers.IO) {
+        try {
+            // 获取视频 FPS
+            val fps = getFps(videoPath)
+            val fpsValue = fps ?: 25f
+            
+            // 创建临时目录存储帧图片
+            val tempDir = File(context.cacheDir, "frames_${System.currentTimeMillis()}")
+            tempDir.mkdirs()
+            
+            // 计算要提取的时间点
+            val frameIndices = (startFrame until endFrame step interval).toList()
+            if (frameIndices.isEmpty()) {
+                return@withContext emptyList()
+            }
+            
+            // 方法1: 使用 FFmpeg 批量提取（最快）
+            val success = extractFramesWithFfmpeg(videoPath, frameIndices, fpsValue, tempDir)
+            
+            if (success) {
+                // 读取所有提取的帧
+                val frames = mutableListOf<Pair<Int, ByteArray>>()
+                for ((idx, frameIdx) in frameIndices.withIndex()) {
+                    val frameFile = File(tempDir, "frame_%04d.jpg".format(idx + 1))
+                    if (frameFile.exists()) {
+                        val bytes = frameFile.readBytes()
+                        frames.add(Pair(frameIdx, bytes))
+                    }
+                }
+                
+                // 清理临时文件
+                tempDir.deleteRecursively()
+                
+                return@withContext frames
+            }
+            
+            // 方法2: 降级到 MediaMetadataRetriever
+            tempDir.deleteRecursively()
+            extractFramesWithMediaRetriever(videoPath, frameIndices, fpsValue)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "FFmpeg batch extract failed", e)
+            // 降级方案
+            val fps = getFps(videoPath) ?: 25f
+            extractFramesWithMediaRetriever(videoPath, (startFrame until endFrame step interval).toList(), fps)
+        }
+    }
+    
+    /**
+     * 使用 FFmpeg 批量提取帧
+     * 输出 640x640 JPEG，大幅减少后续处理时间
+     */
+    private suspend fun extractFramesWithFfmpeg(
+        videoPath: String,
+        frameIndices: List<Int>,
+        fps: Float,
+        outputDir: File
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            if (frameIndices.isEmpty()) return@withContext false
+            
+            // 构建 FFmpeg 输入时间点
+            val timePoints = frameIndices.map { it / fps }
+            
+            // 方法: 使用 select 滤镜只提取特定帧，并缩放到 640x640
+            val timesStr = timePoints.joinToString("|") { "%.3f".format(it) }
+            
+            // FFmpeg select 语法: -vf "select='eq(n\,100)+eq(n\,200)'"
+            val selectExpr = timePoints.indices.joinToString("+") { 
+                "eq(n\\,${frameIndices[it].toInt()})" 
+            }
+            
+            val command = "-y -i \"$videoPath\" -vf \"select='$selectExpr',scale=640:640:force_original_aspect_ratio=decrease,pad=640:640:(ow-iw)/2:(oh-ih)/2\" -vsync 0 -q:v 2 \"${outputDir.absolutePath}/frame_%04d.jpg\""
+            
+            Log.d(TAG, "FFmpeg batch extract: ${command.take(200)}")
+            
+            val session = FFmpegKit.execute(command)
+            val returnCode = session.returnCode
+            
+            if (ReturnCode.isSuccess(returnCode)) {
+                Log.d(TAG, "FFmpeg batch extract success")
+                true
+            } else {
+                Log.e(TAG, "FFmpeg failed: ${session.failStackTrace}")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "FFmpeg exception", e)
+            false
+        }
+    }
+    
+    /**
+     * 降级方案: 使用 MediaMetadataRetriever 提取帧
+     */
+    private suspend fun extractFramesWithMediaRetriever(
+        videoPath: String,
+        frameIndices: List<Int>,
+        fps: Float
+    ): List<Pair<Int, ByteArray>> = withContext(Dispatchers.IO) {
         val frames = mutableListOf<Pair<Int, ByteArray>>()
         
-        for (frameIndex in startFrame until endFrame step interval) {
+        for (frameIndex in frameIndices) {
             extractFrame(videoPath, frameIndex)?.let { frameData ->
                 frames.add(Pair(frameIndex, frameData))
             }
         }
         
         frames
+    }
+    
+    /**
+     * 获取视频 FPS
+     */
+    private suspend fun getFps(videoPath: String): Float? = withContext(Dispatchers.IO) {
+        try {
+            val retriever = MediaMetadataRetriever()
+            if (videoPath.startsWith("content://")) {
+                retriever.setDataSource(context, Uri.parse(videoPath))
+            } else {
+                retriever.setDataSource(videoPath)
+            }
+            
+            val fpsStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)
+            retriever.release()
+            
+            fpsStr?.toFloatOrNull() ?: 25f
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get FPS", e)
+            25f
+        }
     }
     
     override suspend fun saveFrame(frameData: ByteArray, outputPath: String): String = withContext(Dispatchers.IO) {
