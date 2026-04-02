@@ -31,6 +31,10 @@ class VideoRepositoryImpl(
     private val context: Context
 ) : VideoRepository {
     
+    companion object {
+        private const val TAG = "VideoRepository"
+    }
+    
     private val processingStates = mutableMapOf<String, MutableStateFlow<VideoProcessingState>>()
     
     // FFmpeg 帧提取器（用于支持更多视频格式如 .dav）
