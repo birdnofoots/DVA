@@ -1,70 +1,185 @@
 package com.dva.app.infrastructure.ml
 
 import android.content.Context
+import android.content.res.AssetManager
+import android.util.Log
 import com.dva.app.domain.model.VehicleDetection
 import com.dva.app.domain.model.BoundingBox
+import com.microsoft.onnxruntime.OrtEnvironment
+import com.microsoft.onnxruntime.OrtSession
+import java.io.File
+import java.io.FileOutputStream
 
 /**
  * 车辆检测器接口
  */
 interface VehicleDetector {
     suspend fun detect(frames: List<Pair<Int, ByteArray>>): List<VehicleDetection>
+    fun isModelAvailable(): Boolean
 }
 
 /**
  * YOLOv8 车辆检测器实现
  * 
- * 注意：完整实现需要正确配置 ONNX Runtime
- * 当前版本为基础框架，实际推理需要模型文件
+ * 使用 ONNX Runtime 进行模型推理
  */
 class YoloVehicleDetector(
     private val context: Context,
-    modelPath: String
+    private val modelPath: String
 ) : VehicleDetector {
     
-    // COCO 类别中与车辆相关的类别
-    private val vehicleClasses = setOf(2, 3, 5, 7, 8) // car, motorcycle, bus, truck, train
+    companion object {
+        private const val TAG = "YoloVehicleDetector"
+        
+        // 模型文件名
+        private const val MODEL_FILE_NAME = "yolov8n-vehicle.onnx"
+        
+        // assets 中模型的路径
+        private const val ASSETS_MODEL_PATH = "models/$MODEL_FILE_NAME"
+        
+        // 模型缓存目录
+        private const val MODEL_CACHE_DIR = "models"
+        
+        // COCO 类别中与车辆相关的类别
+        private val vehicleClasses = setOf(2, 3, 5, 7, 8) // car, motorcycle, bus, truck, train
+        
+        // 置信度阈值
+        private val confidenceThreshold = 0.5f
+        
+        // NMS 阈值
+        private val nmsThreshold = 0.4f
+        
+        // 输入图片尺寸 (YOLOv8n 默认)
+        private const val INPUT_SIZE = 640
+    }
     
-    // 置信度阈值
-    private val confidenceThreshold = 0.5f
+    private var ortEnvironment: OrtEnvironment? = null
+    private var ortSession: OrtSession? = null
     
-    // 模型是否可用（需要 assets 中的 .onnx 文件）
-    private var isModelLoaded = false
+    // 模型是否可用
+    private var _isModelLoaded = false
+    override fun isModelAvailable() = _isModelLoaded
     
     init {
         try {
-            // 尝试加载模型
-            // val session = OrtEnvironment.getEnvironment().createSession(modelPath, OrtSession.SessionOptions())
-            // isModelLoaded = true
-            isModelLoaded = false // 暂时禁用，ONNX Runtime 需要正确配置
+            // 获取模型文件
+            val modelFile = getModelFile()
+            if (modelFile != null && modelFile.exists()) {
+                Log.d(TAG, "Loading model from: ${modelFile.absolutePath}")
+                
+                // 创建 ONNX Runtime session
+                ortEnvironment = OrtEnvironment.getEnvironment()
+                ortSession = ortEnvironment?.createSession(modelFile.absolutePath)
+                
+                _isModelLoaded = ortSession != null
+                Log.d(TAG, "Model loaded successfully: $_isModelLoaded")
+            } else {
+                Log.e(TAG, "Model file not found at: $modelPath")
+                _isModelLoaded = false
+            }
         } catch (e: Exception) {
-            isModelLoaded = false
+            Log.e(TAG, "Failed to load model", e)
+            _isModelLoaded = false
+        }
+    }
+    
+    /**
+     * 获取模型文件
+     * 优先从 filesDir 加载，其次从 assets 加载
+     */
+    private fun getModelFile(): File? {
+        // 1. 先检查 filesDir 中的模型（下载的模型）
+        val filesDirModel = File(context.filesDir, "$MODEL_CACHE_DIR/$MODEL_FILE_NAME")
+        if (filesDirModel.exists()) {
+            Log.d(TAG, "Model found in filesDir: ${filesDirModel.absolutePath}")
+            return filesDirModel
+        }
+        
+        // 2. 检查缓存目录（ModelDownloadManager 下载的位置）
+        val cacheDirModel = File(context.cacheDir, "$MODEL_CACHE_DIR/$MODEL_FILE_NAME")
+        if (cacheDirModel.exists()) {
+            Log.d(TAG, "Model found in cacheDir: ${cacheDirModel.absolutePath}")
+            return cacheDirModel
+        }
+        
+        // 3. 从 assets 复制到缓存
+        return try {
+            val assetModel = copyAssetToCache()
+            if (assetModel != null) {
+                Log.d(TAG, "Model copied from assets to: ${assetModel.absolutePath}")
+            }
+            assetModel
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to copy model from assets", e)
+            null
+        }
+    }
+    
+    /**
+     * 从 assets 复制模型到缓存目录
+     */
+    private fun copyAssetToCache(): File? {
+        return try {
+            val cacheDir = File(context.cacheDir, MODEL_CACHE_DIR)
+            if (!cacheDir.exists()) {
+                cacheDir.mkdirs()
+            }
+            
+            val destFile = File(cacheDir, MODEL_FILE_NAME)
+            if (destFile.exists()) {
+                return destFile
+            }
+            
+            context.assets.open(ASSETS_MODEL_PATH).use { input ->
+                FileOutputStream(destFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            
+            Log.d(TAG, "Model copied from assets to: ${destFile.absolutePath}, size: ${destFile.length()}")
+            destFile
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to copy model from assets", e)
+            null
         }
     }
     
     override suspend fun detect(frames: List<Pair<Int, ByteArray>>): List<VehicleDetection> {
-        if (!isModelLoaded) {
-            // 模型未加载，返回空结果
-            // TODO: 后续接入真实的 YOLOv8 模型
+        if (!_isModelLoaded || ortSession == null) {
+            Log.w(TAG, "Model not loaded, returning empty results")
             return emptyList()
         }
         
         val results = mutableListOf<VehicleDetection>()
         for ((frameIndex, frameData) in frames) {
-            val detections = detectFrame(frameIndex, frameData)
-            results.addAll(detections)
+            try {
+                val detections = detectFrame(frameIndex, frameData)
+                results.addAll(detections)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error detecting frame $frameIndex", e)
+            }
         }
         return results
     }
     
+    /**
+     * 检测单帧中的车辆
+     */
     private fun detectFrame(frameIndex: Int, frameData: ByteArray): List<VehicleDetection> {
-        // TODO: 实现真实的 YOLOv8 推理
-        // 1. 预处理：缩放到 640x640，归一化 RGB
-        // 2. 推理：调用 ONNX Runtime
-        // 3. 后处理：解析输出，NMS，非极大值抑制
+        if (ortSession == null) return emptyList()
         
-        // 当前返回空，实际需要接入模型
-        return emptyList()
+        try {
+            // TODO: 实现真实的 YOLOv8 推理
+            // 1. 预处理：将 frameData 转换为 Bitmap 然后缩放到 640x640
+            // 2. 推理：调用 ortSession.run()
+            // 3. 后处理：解析输出，NMS
+            
+            // 当前返回空，实际需要接入模型
+            return emptyList()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in detectFrame", e)
+            return emptyList()
+        }
     }
     
     /**
@@ -72,9 +187,7 @@ class YoloVehicleDetector(
      * 将原始帧数据转换为模型输入格式
      */
     private fun preprocessFrame(frameData: ByteArray, width: Int, height: Int): FloatArray {
-        // 简化实现：实际需要 RGB 转换 + 归一化
-        val inputSize = 640
-        val floatInput = FloatArray(3 * inputSize * inputSize)
+        val floatInput = FloatArray(3 * INPUT_SIZE * INPUT_SIZE)
         
         // 归一化到 [0, 1]
         for (i in frameData.indices) {
@@ -102,11 +215,9 @@ class YoloVehicleDetector(
             val detection = output[i]
             if (detection.size < 6) continue
             
-            // 检测格式: [x, y, w, h, obj_conf, class1_conf, class2_conf, ...]
             val objConf = detection[4]
             if (objConf < confidenceThreshold) continue
             
-            // 找最高置信度的类别
             var maxClass = 0
             var maxConf = 0f
             for (j in 5 until detection.size) {
@@ -116,7 +227,6 @@ class YoloVehicleDetector(
                 }
             }
             
-            // 只保留车辆类别
             if (maxClass !in vehicleClasses) continue
             
             val x = detection[0]
@@ -155,5 +265,42 @@ class YoloVehicleDetector(
             7 -> "truck"
             else -> "vehicle"
         }
+    }
+    
+    /**
+     * 非极大值抑制 (NMS)
+     */
+    private fun applyNMS(detections: List<VehicleDetection>): List<VehicleDetection> {
+        // 按置信度排序
+        val sorted = detections.sortedByDescending { it.confidence }.toMutableList()
+        val result = mutableListOf<VehicleDetection>()
+        
+        while (sorted.isNotEmpty()) {
+            val current = sorted.removeAt(0)
+            result.add(current)
+            
+            sorted.removeAll { other ->
+                iou(current.boundingBox, other.boundingBox) > nmsThreshold
+            }
+        }
+        
+        return result
+    }
+    
+    /**
+     * 计算两个边界框的 IOU (Intersection over Union)
+     */
+    private fun iou(box1: BoundingBox, box2: BoundingBox): Float {
+        val x1 = maxOf(box1.left, box2.left)
+        val y1 = maxOf(box1.top, box2.top)
+        val x2 = minOf(box1.right, box2.right)
+        val y2 = minOf(box1.bottom, box2.bottom)
+        
+        val intersection = maxOf(0f, x2 - x1) * maxOf(0f, y2 - y1)
+        val area1 = (box1.right - box1.left) * (box1.bottom - box1.top)
+        val area2 = (box2.right - box2.left) * (box2.bottom - box2.top)
+        val union = area1 + area2 - intersection
+        
+        return if (union > 0) intersection / union else 0f
     }
 }
