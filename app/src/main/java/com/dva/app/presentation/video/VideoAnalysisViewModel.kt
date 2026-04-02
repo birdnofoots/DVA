@@ -7,6 +7,7 @@ import com.dva.app.domain.model.VideoFile
 import com.dva.app.domain.repository.VideoRepository
 import com.dva.app.domain.usecase.AnalyzeVideoUseCase
 import com.dva.app.domain.usecase.GetVideoInfoUseCase
+import com.dva.app.infrastructure.ml.VehicleDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,7 +42,8 @@ data class VideoAnalysisUiState(
 class VideoAnalysisViewModel @Inject constructor(
     private val analyzeVideoUseCase: AnalyzeVideoUseCase,
     private val getVideoInfoUseCase: GetVideoInfoUseCase,
-    private val videoRepository: VideoRepository
+    private val videoRepository: VideoRepository,
+    private val vehicleDetector: VehicleDetector
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(VideoAnalysisUiState())
@@ -66,6 +68,18 @@ class VideoAnalysisViewModel @Inject constructor(
                 errorMessage = null,
                 logMessages = listOf("开始分析视频...")
             )
+            
+            // 检查模型加载状态
+            if (!vehicleDetector.isModelAvailable()) {
+                val errorMsg = "⚠️ AI 模型未加载！车辆检测功能不可用。"
+                addLog(errorMsg)
+                _uiState.value = _uiState.value.copy(
+                    isAnalyzing = false,
+                    errorMessage = "AI 模型未加载，请检查 assets/models/ 目录"
+                )
+                return@launch
+            }
+            addLog("✅ AI 模型已加载")
             
             try {
                 // 如果是 SAF URI，尝试直接分析或复制到本地缓存
