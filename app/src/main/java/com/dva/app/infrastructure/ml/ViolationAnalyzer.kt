@@ -39,7 +39,7 @@ interface ViolationAnalyzer {
  * 检测逻辑：
  * 1. 追踪车辆在连续帧中的位置变化
  * 2. 当车辆跨越车道线时，判定为变道
- * 3. 检查变道前是否有转向灯信号（当前版本通过运动轨迹推断）
+ * 3. 同一车辆一旦报告变道违章，不再重复报告
  */
 class LaneChangeViolationAnalyzer : ViolationAnalyzer {
     
@@ -48,15 +48,14 @@ class LaneChangeViolationAnalyzer : ViolationAnalyzer {
         private const val MIN_CROSS_FRAMES = 3
         // 车辆跨越车道线的阈值（像素）
         private const val CROSS_THRESHOLD = 10f
-        // 同一车辆两次违章判定的最小帧间隔
-        private const val VIOLATION_COOLDOWN = 150 // 约6秒（25fps）
     }
     
-    // 车辆历史轨迹：trackId -> list of (frameIndex, centerX)
-    private val vehicleTrajectories = mutableMapOf<Int, MutableList<Pair<Int, Float>>>()
+    // 车辆历史轨迹：positionKey -> list of (frameIndex, centerX)
+    // 使用 centerX + classId 作为简单追踪 key
+    private val vehicleTrajectories = mutableMapOf<String, MutableList<Pair<Int, Float>>>()
     
-    // 上次违章帧记录：trackId -> lastViolationFrame
-    private val lastViolationFrame = mutableMapOf<Int, Int>()
+    // 已完成变道的车辆 key（不再重复报告）
+    private val completedLaneChanges = mutableSetOf<String>()
     
     override suspend fun analyze(
         videoPath: String,
@@ -68,12 +67,34 @@ class LaneChangeViolationAnalyzer : ViolationAnalyzer {
         
         // 更新轨迹
         for (vehicle in vehicles) {
-            val trajectory = vehicleTrajectories.getOrPut(vehicle.trackId) { mutableListOf() }
+            // 创建车辆唯一标识：class + 大致位置（以 50 像素为单位）
+            val positionKey = "${vehicle.classId}_${(vehicle.centerX / 50).toInt()}_${(vehicle.centerY / 50).toInt()}"
+            
+            val trajectory = vehicleTrajectories.getOrPut(positionKey) { mutableListOf() }
             trajectory.add(Pair(frameIndex, vehicle.centerX))
             
             // 保持最近30帧的轨迹
             if (trajectory.size > 30) {
                 trajectory.removeAt(0)
+            }
+            
+            // 检查该车是否已完成变道
+            if (completedLaneChanges.contains(positionKey)) continue
+            
+            // 检测变道
+            val laneChange = detectLaneChange(trajectory)
+            if (laneChange != null) {
+                violations.add(
+                    ViolationEvent(
+                        type = ViolationType.LANE_CHANGE_NO_SIGNAL,
+                        frameIndex = frameIndex,
+                        vehicleId = vehicle.trackId,
+                        confidence = laneChange.confidence,
+                        details = laneChange.details
+                    )
+                )
+                // 标记该车已完成变道
+                completedLaneChanges.add(positionKey)
             }
         }
         
@@ -146,7 +167,7 @@ class LaneChangeViolationAnalyzer : ViolationAnalyzer {
      */
     override fun reset() {
         vehicleTrajectories.clear()
-        lastViolationFrame.clear()
+        completedLaneChanges.clear()
     }
 }
 
