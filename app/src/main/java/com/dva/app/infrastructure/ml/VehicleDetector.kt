@@ -60,49 +60,65 @@ class YoloVehicleDetector(
     override fun isModelAvailable() = _isModelLoaded
     
     init {
-        Log.d(TAG, "=== YoloVehicleDetector initializing ===")
+        // 初始化调试日志
+        ModelLoadingDebug.init(context)
+        ModelLoadingDebug.log("=== YoloVehicleDetector initializing ===")
+        
+        // 打印系统信息
+        ModelLoadingDebug.log("Android SDK: ${android.os.Build.VERSION.SDK_INT}")
+        ModelLoadingDebug.log("ONNX Runtime version: ${try { OrtEnvironment.getRuntimeVersion() } catch (e: Exception) { "unknown: ${e.message}" }}")
         
         // 方法1: 从 assets 直接加载 ByteArray
         try {
-            Log.d(TAG, "Method 1: Loading from assets as ByteArray...")
+            ModelLoadingDebug.log("Method 1: Loading from assets as ByteArray...")
             val modelBytes = context.assets.open(ASSETS_MODEL_PATH).readBytes()
-            Log.d(TAG, "  Read ${modelBytes.size} bytes from assets")
+            ModelLoadingDebug.log("  Read ${modelBytes.size} bytes from assets")
             
+            ModelLoadingDebug.log("  Creating OrtEnvironment...")
             ortEnvironment = OrtEnvironment.getEnvironment()
-            Log.d(TAG, "  Created OrtEnvironment")
+            ModelLoadingDebug.log("  OrtEnvironment created")
             
+            ModelLoadingDebug.log("  Creating OrtSession from ByteArray...")
             ortSession = ortEnvironment?.createSession(modelBytes)
-            Log.d(TAG, "  Created OrtSession from ByteArray")
+            ModelLoadingDebug.log("  OrtSession created")
             
             _isModelLoaded = ortSession != null
-            Log.d(TAG, "  Model loaded: $_isModelLoaded")
+            ModelLoadingDebug.log("  Model loaded: $_isModelLoaded")
             
         } catch (e: Exception) {
-            Log.e(TAG, "Method 1 failed: ${e::class.simpleName}: ${e.message}")
+            ModelLoadingDebug.logError("Method 1 failed", e)
             e.printStackTrace()
             
             // 方法2: 复制到缓存后从文件加载
             try {
-                Log.d(TAG, "Method 2: Copying to cache and loading from file...")
+                ModelLoadingDebug.log("Method 2: Copying to cache and loading from file...")
                 val modelFile = copyModelToCache()
                 if (modelFile != null && modelFile.exists()) {
-                    Log.d(TAG, "  Model file exists: ${modelFile.absolutePath}, size: ${modelFile.length()}")
+                    ModelLoadingDebug.log("  Model file exists: ${modelFile.absolutePath}, size: ${modelFile.length()}")
                     
+                    ModelLoadingDebug.log("  Creating OrtEnvironment...")
                     ortEnvironment = OrtEnvironment.getEnvironment()
+                    ModelLoadingDebug.log("  OrtEnvironment created")
+                    
+                    ModelLoadingDebug.log("  Creating OrtSession from file: ${modelFile.absolutePath}...")
                     ortSession = ortEnvironment?.createSession(modelFile.absolutePath)
                     
                     _isModelLoaded = ortSession != null
-                    Log.d(TAG, "  Model loaded from file: $_isModelLoaded")
+                    ModelLoadingDebug.log("  Model loaded from file: $_isModelLoaded")
                 } else {
-                    Log.e(TAG, "  Model file not found after copy")
+                    ModelLoadingDebug.log("  Model file not found after copy")
                 }
             } catch (e2: Exception) {
-                Log.e(TAG, "Method 2 also failed: ${e2::class.simpleName}: ${e2.message}")
+                ModelLoadingDebug.logError("Method 2 also failed", e2)
                 e2.printStackTrace()
             }
         }
         
-        Log.d(TAG, "=== YoloVehicleDetector init complete. Available: $_isModelLoaded ===")
+        ModelLoadingDebug.log("=== YoloVehicleDetector init complete. Available: $_isModelLoaded ===")
+        ModelLoadingDebug.log("Log file: ${ModelLoadingDebug.getLogFilePath()}")
+        ModelLoadingDebug.close()
+        
+        Log.d(TAG, "YoloVehicleDetector init complete. Model available: $_isModelLoaded")
     }
     
     /**
@@ -111,26 +127,26 @@ class YoloVehicleDetector(
     private fun copyModelToCache(): File? {
         return try {
             val cacheDir = File(context.cacheDir, MODEL_CACHE_DIR)
-            Log.d(TAG, "  Creating cache dir: ${cacheDir.absolutePath}")
+            ModelLoadingDebug.log("  Creating cache dir: ${cacheDir.absolutePath}")
             cacheDir.mkdirs()
             
             val destFile = File(cacheDir, MODEL_FILE_NAME)
             
             if (!destFile.exists()) {
-                Log.d(TAG, "  Copying model from assets to: ${destFile.absolutePath}")
+                ModelLoadingDebug.log("  Copying model from assets to: ${destFile.absolutePath}")
                 context.assets.open(ASSETS_MODEL_PATH).use { input ->
                     FileOutputStream(destFile).use { output ->
                         input.copyTo(output)
                     }
                 }
-                Log.d(TAG, "  Copy complete, size: ${destFile.length()}")
+                ModelLoadingDebug.log("  Copy complete, size: ${destFile.length()}")
             } else {
-                Log.d(TAG, "  Model already exists in cache")
+                ModelLoadingDebug.log("  Model already exists in cache")
             }
             
             destFile
         } catch (e: Exception) {
-            Log.e(TAG, "  Failed to copy model: ${e::class.simpleName}: ${e.message}")
+            ModelLoadingDebug.logError("  Failed to copy model", e)
             e.printStackTrace()
             null
         }
