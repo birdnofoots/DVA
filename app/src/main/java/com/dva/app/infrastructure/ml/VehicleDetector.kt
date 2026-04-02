@@ -77,7 +77,7 @@ class YoloVehicleDetector(
                     Log.d(TAG, "Model loaded successfully: $_isModelLoaded")
                     
                     if (ortSession != null) {
-                        Log.d(TAG, "ONNX Runtime version: ${OrtEnvironment.getRuntimeVersion()}")
+                        Log.d(TAG, "ONNX Runtime session created successfully")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "ONNX Runtime error", e)
