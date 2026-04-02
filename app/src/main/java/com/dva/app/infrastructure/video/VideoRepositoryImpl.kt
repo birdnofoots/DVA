@@ -471,94 +471,59 @@ class VideoRepositoryImpl(
         endFrame: Int,
         interval: Int
     ): List<Pair<Int, ByteArray>> = withContext(Dispatchers.IO) {
-        try {
-            // 获取视频 FPS
-            val fps = getFps(videoPath)
-            val fpsValue = fps ?: 25f
-            
-            // 创建临时目录存储帧图片
-            val tempDir = File(context.cacheDir, "frames_${System.currentTimeMillis()}")
-            tempDir.mkdirs()
-            
-            // 计算要提取的时间点
-            val frameIndices = (startFrame until endFrame step interval).toList()
-            if (frameIndices.isEmpty()) {
-                return@withContext emptyList()
-            }
-            
-            // 方法1: 使用 FFmpeg 批量提取（最快）
-            val success = extractFramesWithFfmpeg(videoPath, frameIndices, fpsValue, tempDir)
-            
-            if (success) {
-                // 读取所有提取的帧
-                val frames = mutableListOf<Pair<Int, ByteArray>>()
-                for ((idx, frameIdx) in frameIndices.withIndex()) {
-                    val frameFile = File(tempDir, "frame_%04d.jpg".format(idx + 1))
-                    if (frameFile.exists()) {
-                        val bytes = frameFile.readBytes()
-                        frames.add(Pair(frameIdx, bytes))
-                    }
-                }
-                
-                // 清理临时文件
-                tempDir.deleteRecursively()
-                
-                return@withContext frames
-            }
-            
-            // 方法2: 降级到 MediaMetadataRetriever
-            tempDir.deleteRecursively()
-            extractFramesWithMediaRetriever(videoPath, frameIndices, fpsValue)
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "FFmpeg batch extract failed", e)
-            // 降级方案
-            val fps = getFps(videoPath) ?: 25f
-            extractFramesWithMediaRetriever(videoPath, (startFrame until endFrame step interval).toList(), fps)
+        // 计算要提取的时间点
+        val frameIndices = (startFrame until endFrame step interval).toList()
+        if (frameIndices.isEmpty()) {
+            return@withContext emptyList()
         }
+        
+        // 简单方案: 用 FFmpeg 一次seek到一个时间点，提取单帧
+        // 这样比 MediaMetadataRetriever 快很多
+        val frames = mutableListOf<Pair<Int, ByteArray>>()
+        
+        for (frameIdx in frameIndices) {
+            try {
+                val frameBytes = extractSingleFrameWithFfmpeg(videoPath, frameIdx)
+                if (frameBytes != null) {
+                    frames.add(Pair(frameIdx, frameBytes))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to extract frame $frameIdx", e)
+            }
+        }
+        
+        return@withContext frames
     }
     
     /**
-     * 使用 FFmpeg 批量提取帧
-     * 输出 640x640 JPEG，大幅减少后续处理时间
+     * 使用 FFmpeg 提取单帧
+     * 比 MediaMetadataRetriever 快
      */
-    private suspend fun extractFramesWithFfmpeg(
-        videoPath: String,
-        frameIndices: List<Int>,
-        fps: Float,
-        outputDir: File
-    ): Boolean = withContext(Dispatchers.IO) {
+    private suspend fun extractSingleFrameWithFfmpeg(videoPath: String, frameIndex: Int): ByteArray? = withContext(Dispatchers.IO) {
         try {
-            if (frameIndices.isEmpty()) return@withContext false
+            val fps = getFps(videoPath) ?: 25f
+            val timeSeconds = frameIndex / fps
             
-            // 构建 FFmpeg 输入时间点
-            val timePoints = frameIndices.map { it / fps }
+            // 创建临时文件
+            val tempFile = File(context.cacheDir, "frame_${System.currentTimeMillis()}_$frameIndex.jpg")
             
-            // 方法: 使用 select 滤镜只提取特定帧，并缩放到 640x640
-            val timesStr = timePoints.joinToString("|") { "%.3f".format(it) }
-            
-            // FFmpeg select 语法: -vf "select='eq(n\,100)+eq(n\,200)'"
-            val selectExpr = timePoints.indices.joinToString("+") { 
-                "eq(n\\,${frameIndices[it].toInt()})" 
-            }
-            
-            val command = "-y -i \"$videoPath\" -vf \"select='$selectExpr',scale=640:640:force_original_aspect_ratio=decrease,pad=640:640:(ow-iw)/2:(oh-ih)/2\" -vsync 0 -q:v 2 \"${outputDir.absolutePath}/frame_%04d.jpg\""
-            
-            Log.d(TAG, "FFmpeg batch extract: ${command.take(200)}")
+            // FFmpeg 命令: seek到时间点，提取一帧，缩放到 640x640
+            val command = "-y -ss %.3f -i \"$videoPath\" -vframes 1 -vf \"scale=640:640:force_original_aspect_ratio=decrease,pad=640:640:(ow-iw)/2:(oh-ih)/2\" -q:v 2 \"${tempFile.absolutePath}\"".format(timeSeconds)
             
             val session = FFmpegKit.execute(command)
             val returnCode = session.returnCode
             
-            if (ReturnCode.isSuccess(returnCode)) {
-                Log.d(TAG, "FFmpeg batch extract success")
-                true
+            return@withContext if (ReturnCode.isSuccess(returnCode) && tempFile.exists()) {
+                val bytes = tempFile.readBytes()
+                tempFile.delete()
+                bytes
             } else {
-                Log.e(TAG, "FFmpeg failed: ${session.failStackTrace}")
-                false
+                tempFile.delete()
+                null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "FFmpeg exception", e)
-            false
+            Log.e(TAG, "FFmpeg extract failed for frame $frameIndex", e)
+            null
         }
     }
     
