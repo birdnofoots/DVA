@@ -17,6 +17,17 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 /**
+ * 格式化时间戳为相对时间 (HH:mm:ss)
+ */
+private fun formatElapsedTime(timestampMs: Long): String {
+    val totalSeconds = timestampMs / 1000
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return String.format("%02d:%02d:%02d", hours, minutes, seconds)
+}
+
+/**
  * 报告页面
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -212,7 +223,7 @@ fun ReportViolationCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = dateFormat.format(Date(violation.timestamp)),
+                        text = formatElapsedTime(violation.timestamp),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

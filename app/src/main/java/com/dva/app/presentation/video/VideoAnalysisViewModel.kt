@@ -147,28 +147,27 @@ class VideoAnalysisViewModel @Inject constructor(
                 )
                 
                 result.onSuccess { violations ->
-                        // 统计涉及车辆数（按车牌去重）
-                        val uniquePlates = violations.mapNotNull { it.plateNumber }.distinct()
-                        val vehicleCount = if (uniquePlates.isNotEmpty()) uniquePlates.size else violations.size
-                        
-                        addLog("分析完成，共检测到 ${violations.size} 个违章，涉及 $vehicleCount 辆车")
-                        _uiState.value = _uiState.value.copy(
-                            isAnalyzing = false,
-                            isComplete = true,
-                            progress = 100,
-                            currentFrame = totalFrames,
-                            analyzedFrames = totalFrames,
-                            violationCount = violations.size,
-                            vehicleCount = vehicleCount,
-                            violations = violations
-                        )
-                    }.onFailure { error ->
-                        addLog("分析失败: ${error.message}")
-                        _uiState.value = _uiState.value.copy(
-                            isAnalyzing = false,
-                            errorMessage = error.message ?: "分析失败"
-                        )
-                    }
+                    // 统计涉及车辆数（按车牌去重）
+                    val uniquePlates = violations.mapNotNull { it.plateNumber }.distinct()
+                    val vehicleCount = if (uniquePlates.isNotEmpty()) uniquePlates.size else violations.size
+                    
+                    addLog("分析完成，共检测到 ${violations.size} 个违章，涉及 $vehicleCount 辆车")
+                    _uiState.value = _uiState.value.copy(
+                        isAnalyzing = false,
+                        isComplete = true,
+                        progress = 100,
+                        currentFrame = totalFrames,
+                        analyzedFrames = totalFrames,
+                        violationCount = violations.size,
+                        vehicleCount = vehicleCount,
+                        violations = violations
+                    )
+                }.onFailure { error ->
+                    addLog("分析失败: ${error.message}")
+                    _uiState.value = _uiState.value.copy(
+                        isAnalyzing = false,
+                        errorMessage = error.message ?: "分析失败"
+                    )
                 }
             } catch (e: Exception) {
                 addLog("错误: ${e.message}")

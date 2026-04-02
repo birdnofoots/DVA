@@ -83,7 +83,7 @@ class ReportViewModel @Inject constructor(
             for ((index, violation) in dateViolations.withIndex()) {
                 sb.appendLine()
                 sb.appendLine("${index + 1}. ${getViolationTypeName(violation.violationType)}")
-                sb.appendLine("   时间戳: ${dateFormat.format(Date(violation.timestamp))}")
+                sb.appendLine("   时间: ${formatElapsedTime(violation.timestamp)}")
                 sb.appendLine("   视频: ${violation.videoPath.substringAfterLast("/")}")
                 sb.appendLine("   帧号: ${violation.frameIndex}")
                 sb.appendLine("   置信度: ${(violation.confidence * 100).toInt()}%")
@@ -137,5 +137,17 @@ class ReportViewModel @Inject constructor(
             ViolationType.RED_LIGHT -> "闯红灯"
             ViolationType.WRONG_LANE -> "不按规定车道行驶"
         }
+    }
+    
+    /**
+     * 格式化时间戳为相对时间 (HH:mm:ss)
+     * @param timestampMs 时间戳（毫秒，从视频开始计算）
+     */
+    private fun formatElapsedTime(timestampMs: Long): String {
+        val totalSeconds = timestampMs / 1000
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds % 60
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds)
     }
 }
