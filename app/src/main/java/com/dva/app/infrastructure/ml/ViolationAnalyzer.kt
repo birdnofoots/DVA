@@ -98,33 +98,6 @@ class LaneChangeViolationAnalyzer : ViolationAnalyzer {
             }
         }
         
-        // 检测变道
-        for (vehicle in vehicles) {
-            val trajectory = vehicleTrajectories[vehicle.trackId] ?: continue
-            
-            // 需要至少5帧才能判断变道方向
-            if (trajectory.size < 5) continue
-            
-            // 检查冷却期
-            val lastFrame = lastViolationFrame[vehicle.trackId] ?: 0
-            if (frameIndex - lastFrame < VIOLATION_COOLDOWN) continue
-            
-            // 分析变道
-            val laneChange = detectLaneChange(trajectory)
-            if (laneChange != null) {
-                violations.add(
-                    ViolationEvent(
-                        type = ViolationType.LANE_CHANGE_NO_SIGNAL,
-                        frameIndex = frameIndex,
-                        vehicleId = vehicle.trackId,
-                        confidence = laneChange.confidence,
-                        details = laneChange.details
-                    )
-                )
-                lastViolationFrame[vehicle.trackId] = frameIndex
-            }
-        }
-        
         return violations
     }
     
