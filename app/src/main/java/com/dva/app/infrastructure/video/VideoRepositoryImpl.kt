@@ -441,7 +441,12 @@ class VideoRepositoryImpl(
             
             retriever.release()
             
-            frame?.let { extractRgbFromBitmap(it) }
+            // 返回 JPEG 编码的图片数据，而不是原始 RGB
+            frame?.let { bitmap ->
+                val outputStream = java.io.ByteArrayOutputStream()
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, outputStream)
+                outputStream.toByteArray()
+            }
         } catch (e: Exception) {
             null
         }
