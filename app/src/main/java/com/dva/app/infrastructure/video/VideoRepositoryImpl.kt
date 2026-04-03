@@ -567,43 +567,6 @@ class VideoRepositoryImpl(
     }
     
     /**
-     * 使用 MediaMetadataRetriever 提取单帧
-     * 支持 content:// URI
-     */
-    private suspend fun extractSingleFrameWithMediaRetriever(videoPath: String, frameIndex: Int): ByteArray? = withContext(Dispatchers.IO) {
-        try {
-            val retriever = MediaMetadataRetriever()
-            
-            if (videoPath.startsWith("content://")) {
-                val uri = Uri.parse(videoPath)
-                retriever.setDataSource(context, uri)
-            } else {
-                retriever.setDataSource(videoPath)
-            }
-            
-            val fps = getFps(videoPath) ?: 25f
-            val timeUs = (frameIndex * 1000000L / fps).toLong()
-            val bitmap = retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
-            
-            retriever.release()
-            
-            return@withContext if (bitmap != null) {
-                // 缩小到 640x640
-                val scaled = Bitmap.createScaledBitmap(bitmap, 640, 640, true)
-                val outputStream = java.io.ByteArrayOutputStream()
-                scaled.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
-                if (scaled != bitmap) scaled.recycle()
-                outputStream.toByteArray()
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "MediaMetadataRetriever failed for frame $frameIndex", e)
-            null
-        }
-    }
-    
-    /**
      * 降级方案: 使用 MediaMetadataRetriever 提取帧
      */
     private suspend fun extractFramesWithMediaRetriever(
