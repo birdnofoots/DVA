@@ -498,8 +498,14 @@ class VideoRepositoryImpl(
     /**
      * 使用 FFmpeg 提取单帧
      * 比 MediaMetadataRetriever 快
+     * 注意：FFmpeg 无法处理 content:// URI，需要使用 MediaMetadataRetriever
      */
     private suspend fun extractSingleFrameWithFfmpeg(videoPath: String, frameIndex: Int): ByteArray? = withContext(Dispatchers.IO) {
+        // SAF URI 无法被 FFmpeg 处理，回退到 MediaMetadataRetriever
+        if (videoPath.startsWith("content://")) {
+            return@withContext extractSingleFrameWithMediaRetriever(videoPath, frameIndex)
+        }
+        
         try {
             val fps = getFps(videoPath) ?: 25f
             val timeSeconds = frameIndex / fps
@@ -513,16 +519,56 @@ class VideoRepositoryImpl(
             val session = FFmpegKit.execute(command)
             val returnCode = session.returnCode
             
-            return@withContext if (ReturnCode.isSuccess(returnCode) && tempFile.exists()) {
+            if (ReturnCode.isSuccess(returnCode) && tempFile.exists()) {
                 val bytes = tempFile.readBytes()
                 tempFile.delete()
-                bytes
+                return@withContext bytes
             } else {
+                Log.e(TAG, "FFmpeg failed for frame $frameIndex, returnCode: $returnCode")
                 tempFile.delete()
+                // FFmpeg 失败，回退到 MediaMetadataRetriever
+                return@withContext extractSingleFrameWithMediaRetriever(videoPath, frameIndex)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "FFmpeg extract exception for frame $frameIndex", e)
+            // 异常，回退到 MediaMetadataRetriever
+            return@withContext extractSingleFrameWithMediaRetriever(videoPath, frameIndex)
+        }
+    }
+    
+    /**
+     * 使用 MediaMetadataRetriever 提取单帧
+     * 支持 content:// URI
+     */
+    private suspend fun extractSingleFrameWithMediaRetriever(videoPath: String, frameIndex: Int): ByteArray? = withContext(Dispatchers.IO) {
+        try {
+            val retriever = MediaMetadataRetriever()
+            
+            if (videoPath.startsWith("content://")) {
+                val uri = Uri.parse(videoPath)
+                retriever.setDataSource(context, uri)
+            } else {
+                retriever.setDataSource(videoPath)
+            }
+            
+            val fps = getFps(videoPath) ?: 25f
+            val timeUs = (frameIndex * 1000000L / fps).toLong()
+            val bitmap = retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
+            
+            retriever.release()
+            
+            return@withContext if (bitmap != null) {
+                // 缩小到 640x640
+                val scaled = Bitmap.createScaledBitmap(bitmap, 640, 640, true)
+                val outputStream = java.io.ByteArrayOutputStream()
+                scaled.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
+                if (scaled != bitmap) scaled.recycle()
+                outputStream.toByteArray()
+            } else {
                 null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "FFmpeg extract failed for frame $frameIndex", e)
+            Log.e(TAG, "MediaMetadataRetriever failed for frame $frameIndex", e)
             null
         }
     }
