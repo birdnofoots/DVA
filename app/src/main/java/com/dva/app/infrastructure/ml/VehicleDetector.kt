@@ -324,6 +324,9 @@ class YoloVehicleDetector(
      * 
      * YOLOv8 输出形状: [1, 84, 8400]
      * 84 = 4 (x, y, w, h) + 80 (class scores)
+     * 
+     * 注意：ONNX Runtime 返回的 Array<Array<FloatArray>> 布局是 [84][8400]，
+     * 即 predictions[feature][box]，需要转置为 [8400][84] 才能按 box 遍历
      */
     private fun postProcessOutput(
         output: Array<Array<FloatArray>>,
@@ -335,21 +338,29 @@ class YoloVehicleDetector(
         val detections = mutableListOf<VehicleDetection>()
         
         // YOLOv8 输出: [batch, 84, 8400]
-        val predictions = output[0] // shape: [84, 8400]
-        logWriter.println("postProcess: predictions shape [${predictions.size}][${predictions[0]?.size ?: 0}]")
+        // output[0] 是 [84, 8400]，需要转置为 [8400, 84] 按框遍历
+        val predictionsRaw = output[0] // shape: [84, 8400]
+        logWriter.println("postProcess: raw predictions shape [${predictionsRaw.size}][${predictionsRaw[0]?.size ?: 0}]")
+        
+        // 转置: 从 [84, 8400] (每列是一个框) 转为 [8400, 84] (每行是一个框)
+        val numBoxes = predictionsRaw[0]?.size ?: 0
+        val numFeatures = predictionsRaw.size
+        logWriter.println("postProcess: transposing to [numBoxes=$numBoxes][numFeatures=$numFeatures]")
         
         // 收集所有有效检测
         val rawDetections = mutableListOf<VehicleDetection>()
         
-        // 遍历所有预测框
-        for (i in 0 until minOf(NUM_BOXES, predictions[0]?.size ?: 0)) {
-            // 获取该框的类别分数
+        // 遍历所有预测框 (每行是一个框的 84 个特征)
+        for (i in 0 until minOf(NUM_BOXES, numBoxes)) {
+            // 提取该框的 84 个特征: [x, y, w, h, c0, c1, ..., c79]
+            val boxFeatures = predictionsRaw.map { it[i] }.toFloatArray()
+            
+            // 4-83 是 80 个类别的分数，找最高分
             var maxScore = 0f
             var maxClassId = -1
             
-            // 4-83 是 80 个类别的分数
             for (c in 4 until OUTPUT_COLUMNS) {
-                val score = predictions[c][i]
+                val score = boxFeatures[c]
                 if (score > maxScore) {
                     maxScore = score
                     maxClassId = c - 4 // 类别 ID 从 0 开始
@@ -359,10 +370,10 @@ class YoloVehicleDetector(
             // 检查是否是车辆类别且置信度足够
             if (maxScore >= confidenceThreshold && maxClassId in vehicleClasses) {
                 // 解析边界框
-                val x = predictions[0][i]
-                val y = predictions[1][i]
-                val w = predictions[2][i]
-                val h = predictions[3][i]
+                val x = boxFeatures[0]
+                val y = boxFeatures[1]
+                val w = boxFeatures[2]
+                val h = boxFeatures[3]
                 
                 // 转换为绝对坐标 (从 640x640 转换到原图尺寸)
                 val left = ((x - w / 2) / INPUT_SIZE * originalWidth).toInt()
