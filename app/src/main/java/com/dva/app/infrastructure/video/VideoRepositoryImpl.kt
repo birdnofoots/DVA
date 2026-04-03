@@ -2,6 +2,7 @@ package com.dva.app.infrastructure.video
 
 import android.content.Context
 import android.database.Cursor
+import android.graphics.Bitmap
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
