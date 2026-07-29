@@ -1,0 +1,10 @@
+# DVA Supervision Backend - 无GPU优化版
+
+supervision>=0.20.0
+ultralytics>=8.2.0
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.9
+pydantic>=2.6.0
+opencv-python>=4.9.0.80
+numpy>=1.26.0
